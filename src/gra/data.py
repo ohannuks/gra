@@ -34,29 +34,27 @@ def list_data():
     return events_all
 
 # Make a sub command 'get' that allows for downloading of either the strain data or the PE samples. Should work as `gra data get strain GW150914` or `gra data get pe GW150914`.
-@data_app.command("get")
-def get_data(data_type: str = typer.Argument(..., help="Type of data to download: 'strain' or 'pe'"),
-             event_name: str = typer.Argument(..., help="Name of the event to download data for")):
-    """ Download data files for a specific event. """
-    valid_types = ['strain', 'pe']
-    if data_type not in valid_types:
-        typer.echo(f"Invalid data type '{data_type}'. Valid types are: {', '.join(valid_types)}")
-        raise typer.Exit(code=1)
+get_app = typer.Typer(help="Download data for a specific event.")
+data_app.add_typer(get_app, name="get")
 
-    events = list_data()
-
-    if data_type == 'strain':
-        datasets = find_datasets(type='strain', event=event_name)
-    elif data_type == 'pe':
-        datasets = find_datasets(type='pe', event=event_name)
-
+@get_app.command("strain")
+def get_strain(event_name: str = typer.Argument(..., help="Name of the event to download strain data for")):
+    datasets = find_datasets(type='strain', event_name=event_name)
     if not datasets:
-        typer.echo(f"No datasets found for event '{event_name}' and type '{data_type}'.")
+        typer.echo(f"No strain datasets found for event '{event_name}'.")
         raise typer.Exit(code=1)
-
     for dataset in datasets:
         typer.echo(f"Downloading {dataset}...")
-        # Here you would add the actual download logic, e.g., using requests or gwosc's download utilities.
-        # For demonstration purposes, we'll just print the dataset name.
+        # Actual download logic goes here
         typer.echo(f"Downloaded {dataset}.")
 
+@get_app.command("pe")
+def get_pe(event_name: str = typer.Argument(..., help="Name of the event to download PE data for")):
+    datasets = find_datasets(type='pe', event_name=event_name)
+    if not datasets:
+        typer.echo(f"No PE datasets found for event '{event_name}'.")
+        raise typer.Exit(code=1)
+    for dataset in datasets:
+        typer.echo(f"Downloading {dataset}...")
+        # Actual download logic goes here
+        typer.echo(f"Downloaded {dataset}.")
