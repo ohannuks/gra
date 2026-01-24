@@ -1,5 +1,10 @@
 import typer
 data_app = typer.Typer(help="Manage your data.")
+data_get_app = typer.Typer(help="Download data for a specific event.") # Make a sub command 'get' that allows for downloading of either the strain data or the PE samples. Should work as `gra data get strain GW150914` or `gra data get pe GW150914`.
+data_inject_app = typer.Typer(help="Create injection data with either real or simulated noise.")
+# Add subcommands to data_app
+data_app.add_typer(data_get_app, name="get")
+data_app.add_typer(data_inject_app, name="inject")
 
 # Imports
 import warnings
@@ -17,9 +22,7 @@ def remove_duplicates(seq):
             seen.add(item_base)
             result.append(item_base)
     return result
-
-@data_app.command("ls")
-def list_data():
+def _list_data():
     """ List available data files. """
     catalogs = ['GWTC-1-confident', 
                 'GWTC-2.1-confident', 
@@ -34,36 +37,28 @@ def list_data():
         events_all.extend(events)
     typer.echo(f"\nTotal unique events: {len(set(events_all))}")
     return events_all
-
-# Make a sub command 'get' that allows for downloading of either the strain data or the PE samples. Should work as `gra data get strain GW150914` or `gra data get pe GW150914`.
-get_app = typer.Typer(help="Download data for a specific event.")
-data_app.add_typer(get_app, name="get")
-
-@get_app.command("strain")
-def get_strain(event_name: str = typer.Argument(..., help="Name of the event to download strain data for")):
-    events = list_data()
+def check_event_name(event_name):
+    events = _list_data()
     if event_name not in events:
         typer.echo(f"Event '{event_name}' not found in available events.")
         raise typer.Exit(code=1)
-    datasets = find_datasets(type='strain', event_name=event_name)
-    if not datasets:
-        typer.echo(f"No strain datasets found for event '{event_name}'.")
-        raise typer.Exit(code=1)
-    for dataset in datasets:
-        typer.echo(f"Downloading {dataset}...")
-        # Actual download logic goes here
-        typer.echo(f"Downloaded {dataset}.")
+    return events
 
-@get_app.command("pe")
+
+@data_app.command("ls")
+def list_data():
+    """ List available data files. """
+    return _list_data()
+
+@data_get_app.command("strain")
+def get_strain(event_name: str = typer.Argument(..., help="Name of the event to download strain data for")):
+    events = check_event_name(event_name)
+    datasets = find_datasets(type='strain', event_name=event_name)
+
+@data_get_app.command("pe")
 def get_pe(event_name: str = typer.Argument(..., help="Name of the event to download PE data for")):
+    events = check_event_name(event_name)
     datasets = find_datasets(type='pe', event_name=event_name)
-    if not datasets:
-        typer.echo(f"No PE datasets found for event '{event_name}'.")
-        raise typer.Exit(code=1)
-    for dataset in datasets:
-        typer.echo(f"Downloading {dataset}...")
-        # Actual download logic goes here
-        typer.echo(f"Downloaded {dataset}.")
 
 
 
