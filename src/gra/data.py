@@ -1,9 +1,11 @@
 import typer
-
 data_app = typer.Typer(help="Manage your data.")
 
-from gwosc.datasets import find_datasets
-
+# Imports
+import warnings
+warnings.filterwarnings("ignore", "Wswiglal-redir-stdio")
+from gwosc.datasets import find_datasets, event_gps
+import gwpy
 
 def remove_duplicates(seq):
     # Each event has multiple versions, so the last bit in the name of '-vX'. We remove it and then remove duplicates.
@@ -39,6 +41,10 @@ data_app.add_typer(get_app, name="get")
 
 @get_app.command("strain")
 def get_strain(event_name: str = typer.Argument(..., help="Name of the event to download strain data for")):
+    events = list_data()
+    if event_name not in events:
+        typer.echo(f"Event '{event_name}' not found in available events.")
+        raise typer.Exit(code=1)
     datasets = find_datasets(type='strain', event_name=event_name)
     if not datasets:
         typer.echo(f"No strain datasets found for event '{event_name}'.")
@@ -58,3 +64,8 @@ def get_pe(event_name: str = typer.Argument(..., help="Name of the event to down
         typer.echo(f"Downloading {dataset}...")
         # Actual download logic goes here
         typer.echo(f"Downloaded {dataset}.")
+
+
+
+
+
