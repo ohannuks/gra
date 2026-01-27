@@ -34,7 +34,8 @@ def _list_data():
     catalogs = ['GWTC-1-confident', 
                 'GWTC-2.1-confident', 
                 'GWTC-3-confident',
-                'GWTC-4.0']
+                'GWTC-4.0',
+                'O4_Discovery_Papers']
     events_all = []
     for catalog in catalogs:
         events = find_datasets(type='events', catalog=catalog)
