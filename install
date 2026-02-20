@@ -1,2 +1,2 @@
-uv tool install .
+uv tool install -e .
 gra --install-completion

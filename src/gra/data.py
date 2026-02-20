@@ -110,6 +110,52 @@ def get_lvk_strain(event_name: str = typer.Argument(..., help="Name of the event
     else:
         return _get_lvk_strain_individual(event_name)
 
+def _get_2mass_all():
+    from astroquery.ipac.irsa import Irsa
+    import astropy.units as u
+    
+    # Create a folder if it doesn't exist
+    if not os.path.exists("2mass"):
+        os.makedirs("2mass")
+    output_file = "2mass/2mass_galaxy_catalog.csv"
+    # If the file exists, just load it instead of downloading again
+    if os.path.exists(output_file):
+        print(f"File {output_file} already exists. Loading data from file...")
+        from astropy.table import Table
+        data_table = Table.read(output_file, format="ascii.csv")
+        print(f"Data loaded from {output_file}. Total sources: {len(data_table)}")
+        return data_table
+
+    # 1. Identify the correct catalog name
+    # The 2MASS Extended Source Catalog is typically 'fp_xsc'
+    catalog_name = "fp_xsc"
+    
+    # 2. Perform an all-sky query
+    # 'select *' retrieves all columns. You can specify columns to reduce file size.
+    print(f"Starting download of {catalog_name}...")
+    data_table = Irsa.query_region(
+        catalog=catalog_name, 
+        spatial="all-sky"
+    )
+    
+    # 3. Save the data to a local file (e.g., CSV or FITS)
+    # Download if the file doesn't exist, otherwise load from file
+    data_table.write(output_file, format="ascii.csv", overwrite=True)
+    
+    print(f"Download complete. Saved to {output_file}")
+    print(f"Total sources downloaded: {len(data_table)}")
+    return data_table
+
+def _get_2mass_individual(event_name):
+    raise ValueError("Not implemented yet; only `all` is supported")
+
+@data_get_app.command("2mass")
+def get_2mass_data(event_name: str = typer.Argument(..., help="Name of the event to download 2MASS data for")):
+    if event_name == 'all':
+        return _get_2mass_all()
+    else:
+        return _get_2mass_individual(event_name)
+
 def get_pe(event_name: str = typer.Argument(..., help="Name of the event to download PE data for")):
     events = check_event_name(event_name)
     datasets = find_datasets(type='pe', event_name=event_name)
