@@ -126,24 +126,28 @@ def _get_2mass_all():
         print(f"Data loaded from {output_file}. Total sources: {len(data_table)}")
         return data_table
 
-    # 1. Identify the correct catalog name
-    # The 2MASS Extended Source Catalog is typically 'fp_xsc'
+    # 1. Define the Catalog and Query
     catalog_name = "fp_xsc"
+    query = f"SELECT * FROM {catalog_name}"
     
-    # 2. Perform an all-sky query
-    # 'select *' retrieves all columns. You can specify columns to reduce file size.
-    print(f"Starting download of {catalog_name}...")
-    data_table = Irsa.query_region(
-        catalog=catalog_name, 
-        spatial="all-sky"
-    )
+    # 2. Launch Asynchronous Job
+    print("Launching asynchronous job...")
+    # Use query_tap for custom ADQL; query_region(spatial='all-sky') 
+    # often defaults to sync which fails for large datasets.
+    job = Irsa.query_tap(query=query, async_job=True)
     
-    # 3. Save the data to a local file (e.g., CSV or FITS)
-    # Download if the file doesn't exist, otherwise load from file
-    data_table.write(output_file, format="ascii.csv", overwrite=True)
+    # 3. Monitor Status
+    while job.get_phase() not in ('COMPLETED', 'ERROR', 'ABORTED'):
+        print(f"Job Status: {job.get_phase()}... waiting 10s")
+        time.sleep(10)
     
-    print(f"Download complete. Saved to {output_file}")
-    print(f"Total sources downloaded: {len(data_table)}")
+    # 4. Handle Results
+    if job.get_phase() == 'COMPLETED':
+        data_table = job.to_table()
+        data_table.write("2mass_galaxy_full.csv", format="ascii.csv", overwrite=True)
+        print(f"Success! Downloaded {len(data_table)} rows to {output_file}.")
+    else:
+        print(f"Job failed with status: {job.get_phase()}")
     return data_table
 
 def _get_2mass_individual(event_name):
