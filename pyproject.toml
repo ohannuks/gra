@@ -16,7 +16,8 @@ dependencies = [
     "ipython>=9.9.0",
     "lalsuite>=7.26.1",
     "numpy>=2.4.1",
-    "typer>=0.21.1",
+    "rich>=14.3.3",
+    "typer-slim>=0.24.0",
 ]
 
 [project.scripts]
