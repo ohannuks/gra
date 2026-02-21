@@ -6,6 +6,7 @@ from gwosc.locate import get_event_urls
 import gwpy
 import gwpy.timeseries
 from lalframe.utils import frtools
+import astropy
 import os
 # Typer apps:
 import typer
@@ -106,52 +107,51 @@ def get_lvk_strain(event_name: str = typer.Argument(..., help="Name of the event
     else:
         return _get_lvk_strain_individual(event_name)
 
-def _get_2mass_all():
-    from astroquery.ipac.irsa import Irsa
-    import astropy.units as u
-    
+def _get_2mass_spectroscopic():
+    from astroquery.vizier import Vizier
+    from astropy.table import Table
+ 
     # Create a folder if it doesn't exist
     if not os.path.exists("2mass"):
         os.makedirs("2mass")
-    output_file = "2mass/2mass_galaxy_catalog.csv"
-    # If the file exists, just load it instead of downloading again
-    if os.path.exists(output_file):
-        print(f"File {output_file} already exists. Loading data from file...")
-        from astropy.table import Table
-        data_table = Table.read(output_file, format="ascii.csv")
-        print(f"Data loaded from {output_file}. Total sources: {len(data_table)}")
-        return data_table
 
-    # 1. Define the Catalog and Query
-    catalog_name = "fp_xsc"
-    query = f"SELECT * FROM {catalog_name}"
+    # 1. Configure the Vizier query
+    # We set the row limit to -1 to get the full catalog (~43k sources)
+    v = Vizier(catalog="J/ApJS/199/26", columns=["2MRS", "RAJ2000", "DEJ2000", "cz"])
+    v.ROW_LIMIT = -1
     
-    # 2. Launch Asynchronous Job
-    print("Launching asynchronous job...")
-    # Use query_tap for custom ADQL; query_region(spatial='all-sky') 
-    # often defaults to sync which fails for large datasets.
-    job = Irsa.query_tap(query=query, async_job=True)
+    # 2. Fetch the catalog
+    typer.echo(f"Downloading 2MRS Catalog... this may take a moment.")
+    result = v.get_catalogs("J/ApJS/199/26")
     
-    # 3. Monitor Status
-    while job.get_phase() not in ('COMPLETED', 'ERROR', 'ABORTED'):
-        print(f"Job Status: {job.get_phase()}... waiting 10s")
-        time.sleep(10)
-    
-    # 4. Handle Results
-    if job.get_phase() == 'COMPLETED':
-        data_table = job.to_table()
-        data_table.write("2mass_galaxy_full.csv", format="ascii.csv", overwrite=True)
-        print(f"Success! Downloaded {len(data_table)} rows to {output_file}.")
+    # 3. Access the primary table (typically the first index)
+    if result:
+        m2rs_table = result[0]
+        # Add z column from cz (redshift = velocity / speed of light)
+        cz_column = m2rs_table['cz']
+        speed_of_light_km_s = astropy.constants.c.to('km/s').value
+        m2rs_table['z'] = cz_column / speed_of_light_km_s
+        
+        # 4. Display summary
+        typer.echo(f"Successfully downloaded {len(m2rs_table)} sources.")
+        typer.echo(m2rs_table[:10])  # Show first 10 rows
+        
+        # Save to a local CSV file:
+        output_file = "2mass/2mass_galaxy_catalog_spec.csv"
+        m2rs_table.write(output_file, format="ascii.csv", overwrite=True)
+        typer.echo(f"Catalog saved to {output_file}")
+        data_table = m2rs_table
     else:
-        print(f"Job failed with status: {job.get_phase()}")
+        typer.echo("No data found.")
+        data_table = None
     return data_table
 
 def _get_2mass_individual(event_name):
     raise ValueError("Not implemented yet; only `all` is supported")
 
-def get_2mass_data(event_name: str = typer.Argument(..., help="Name of the event to download 2MASS data for; otherwise 'all' to download the full 2MASS galaxy catalog")):
-    if event_name == 'all':
-        return _get_2mass_all()
+def get_2mass_data(event_name: str = typer.Argument(..., help="Name of the event to download 2MASS data for; otherwise 'spectorscopic' to download the spectroscopic 3D 2MASS catalog")):
+    if event_name == 'spectroscopic':
+        return _get_2mass_spectroscopic()
     else:
         return _get_2mass_individual(event_name)
 
