@@ -5,6 +5,7 @@ from gwosc.datasets import find_datasets, event_gps, event_detectors
 from gwosc.locate import get_event_urls
 import gwpy
 import gwpy.timeseries
+from lalframe.utils import frtools
 import os
 # Typer apps:
 import typer
@@ -52,24 +53,45 @@ def list_data_lvk():
     typer.echo(f"\nTotal unique events: {len(events)}")
     return events
 
-def _get_lvk_strain_individual(event_name):
+def _get_lvk_strain_individual(event_name, return_data=False):
     events = check_event_name(event_name)
     gps = event_gps(event_name)
     typer.echo(f"Event '{event_name}' found with GPS time {gps}.")
     start, end = int(gps - 60*10), int(gps + 60*10)  # 10 minutes before and after
     detectors = event_detectors(event_name)
     data = {}
+    # Make directory for event if it doesn't exist
+    if not os.path.exists(event_name):
+        os.makedirs(event_name)
     typer.echo(f"Downloading strain data for detectors: {', '.join(detectors)}")
     for det in detectors:
-        typer.echo(f"Fetching {det} data from {start} to {end}...")
-        data[det] = gwpy.timeseries.TimeSeries.fetch_open_data(det, start, end, cache=True)
-        # Make directory for event if it doesn't exist
-        if not os.path.exists(event_name):
-            os.makedirs(event_name)
         filename = f"{event_name}/{event_name}_{det}_strain.gwf"
-        data[det].write(filename, format='gwf')
-        typer.echo(f"Saved strain data to {filename}.")
-    return data
+        # If the file exists, just load it instead of downloading again
+        if os.path.exists(filename):
+            typer.echo(f"File {filename} already exists.")
+            if return_data == False:
+                continue
+            else:
+                # Read the channel name:
+                #channel_name = gwpy.io.gwf.get_channel_names(filename)[0]  # Assuming only one channel per file
+                channel_name = frtools.get_channels(filename)[0] # Assuming only one channel per file
+                data[det] = gwpy.timeseries.TimeSeries.read(filename, format='gwf', channel=channel_name)
+                typer.echo(f"Data loaded from {filename}.")
+                continue
+        typer.echo(f"Fetching {det} data from {start} to {end}...")
+        try:
+            data[det] = gwpy.timeseries.TimeSeries.fetch_open_data(det, start, end, cache=True)
+            # Set channel name to {det}:GWOSC-STRAIN 
+            data[det].channel = f"{det}:GWOSC-STRAIN"
+            data[det].write(filename, format='gwf')
+            channel_name = data[det].channel
+            typer.echo(f"Saved strain data to {filename} with channel {channel_name}.")
+        except Exception as e:
+            typer.echo(f"Error fetching data for {event_name} with {det}: {e}")
+    if return_data:
+        return data
+    else:
+        return None
 
 def _get_lvk_strain_all():
     events = _list_lvk_data()
@@ -127,7 +149,7 @@ def _get_2mass_all():
 def _get_2mass_individual(event_name):
     raise ValueError("Not implemented yet; only `all` is supported")
 
-def get_2mass_data(event_name: str = typer.Argument(..., help="Name of the event to download 2MASS data for")):
+def get_2mass_data(event_name: str = typer.Argument(..., help="Name of the event to download 2MASS data for; otherwise 'all' to download the full 2MASS galaxy catalog")):
     if event_name == 'all':
         return _get_2mass_all()
     else:
