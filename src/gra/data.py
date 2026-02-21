@@ -107,13 +107,23 @@ def get_lvk_strain(event_name: str = typer.Argument(..., help="Name of the event
     else:
         return _get_lvk_strain_individual(event_name)
 
-def _get_2mass_spectroscopic():
+def _get_2mass_spectroscopic(return_data=False):
     from astroquery.vizier import Vizier
     from astropy.table import Table
  
     # Create a folder if it doesn't exist
     if not os.path.exists("2mass"):
         os.makedirs("2mass")
+    filename = "2mass/2mass_galaxy_catalog_spec.csv"
+    # If the file exists, just load it instead of downloading again
+    if os.path.exists(filename):
+        typer.echo(f"File {filename} already exists.")
+        if return_data == False:
+            return None
+        else:
+            data_table = Table.read(filename, format="ascii.csv")
+            typer.echo(f"Data loaded from {filename}.")
+            return data_table
 
     # 1. Configure the Vizier query
     # We set the row limit to -1 to get the full catalog (~43k sources)
@@ -137,14 +147,16 @@ def _get_2mass_spectroscopic():
         typer.echo(m2rs_table[:10])  # Show first 10 rows
         
         # Save to a local CSV file:
-        output_file = "2mass/2mass_galaxy_catalog_spec.csv"
-        m2rs_table.write(output_file, format="ascii.csv", overwrite=True)
-        typer.echo(f"Catalog saved to {output_file}")
+        m2rs_table.write(filename, format="ascii.csv", overwrite=True)
+        typer.echo(f"Catalog saved to {filename}")
         data_table = m2rs_table
     else:
         typer.echo("No data found.")
         data_table = None
-    return data_table
+    if return_data == False:
+        return None
+    else:
+        return data_table
 
 def _get_2mass_individual(event_name):
     raise ValueError("Not implemented yet; only `all` is supported")
