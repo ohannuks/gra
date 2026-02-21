@@ -8,9 +8,9 @@ import gwpy.timeseries
 import os
 # Typer apps:
 import typer
-import rich
+from rich.console import Console
 # Add console
-console = rich.console.Console()
+console = Console()
 
 def remove_duplicates(seq):
     # Each event has multiple versions, so the last bit in the name of '-vX'. We remove it and then remove duplicates.
@@ -127,7 +127,6 @@ def _get_2mass_all():
 def _get_2mass_individual(event_name):
     raise ValueError("Not implemented yet; only `all` is supported")
 
-@data_get_app.command("2mass")
 def get_2mass_data(event_name: str = typer.Argument(..., help="Name of the event to download 2MASS data for")):
     if event_name == 'all':
         return _get_2mass_all()
