@@ -2,6 +2,7 @@
 import warnings
 warnings.filterwarnings("ignore", "Wswiglal-redir-stdio")
 from gwosc.datasets import find_datasets, event_gps, event_detectors
+from zenodo_get import download as zenodo_download
 from gwosc.locate import get_event_urls
 import gwpy
 import gwpy.timeseries
@@ -15,9 +16,52 @@ from rich.console import Console
 console = Console()
 
 pe_zenodo_releases = {}
-pe_zenodo_releases['GWTC-2.1'] = 'https://zenodo.org/records/17014085'
-pe_zenodo_releases['GWTC-3'] = 'https://zenodo.org/records/17014085'
-pe_zenodo_releases['GWTC-4'] = 'https://zenodo.org/records/17014085'
+pe_zenodo_releases['GWTC-2.1-confident'] = 'https://zenodo.org/records/6513631'
+pe_zenodo_releases['GWTC-3-confident'] = 'https://zenodo.org/records/5546663'
+pe_zenodo_releases['GWTC-4.0'] = 'https://zenodo.org/records/17014085'
+
+def _get_lvk_pe_data(event_name):
+    output_dir = f"{event_name}/pe"
+    # Create directory if it doesn't exist
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    # Check if PE data (hdf5) exists already
+    if any(fname.endswith('.hdf5') for fname in os.listdir(output_dir)):
+        typer.echo(f"PE data for '{event_name}' already exists in {output_dir}. Skipping download.")
+        return
+
+    # 1. Identify which catalog contains the event
+    catalogs = list(pe_zenodo_releases.keys()) + ['O4_Discovery_Papers']
+    catalog = None
+    
+    for cat in catalogs:
+        # find_datasets returns a list of event names in that catalog
+        available_events = find_datasets(type='event', catalog=cat)
+        if any(event_name in event for event in available_events):
+            catalog = cat
+            break
+
+    if catalog is None:
+        typer.echo(f"Event '{event_name}' not found in available catalogs.")
+        raise typer.Exit(code=1)
+
+    # 2. Extract Record ID and download from Zenodo
+    if catalog in pe_zenodo_releases:
+        zenodo_url = pe_zenodo_releases[catalog]
+        # Extract the numeric record ID from the end of the URL
+        record_id = zenodo_url.split('/')[-1]
+        
+        typer.echo(f"Downloading PE data for '{event_name}' from Zenodo record {record_id}...")
+        
+        # Download files matching the event name (e.g., HDF5 posterior samples)
+        zenodo_download(
+            record_id, 
+            output_dir=f"{event_name}/pe", 
+            file_glob=f"*{event_name}*" 
+        )
+        typer.echo(f"Download complete. Files saved to: {output_dir}")
+    else:
+        typer.echo(f"No Zenodo release mapping found for catalog '{catalog}'.")
 
 def remove_duplicates(seq):
     # Each event has multiple versions, so the last bit in the name of '-vX'. We remove it and then remove duplicates.
@@ -96,6 +140,8 @@ def _get_lvk_strain_individual(event_name, return_data=False):
             typer.echo(f"Saved strain data to {filename} with channel {channel_name}.")
         except Exception as e:
             typer.echo(f"Error fetching data for {event_name} with {det}: {e}")
+    # Download also PE data:
+    _get_lvk_pe_data(event_name)
     if return_data:
         return data
     else:
@@ -207,8 +253,3 @@ def get_2mass_data(event_name: str = typer.Argument(..., help="Name of the event
 def get_pe(event_name: str = typer.Argument(..., help="Name of the event to download PE data for")):
     events = check_event_name(event_name)
     datasets = find_datasets(type='pe', event_name=event_name)
-
-
-
-
-
