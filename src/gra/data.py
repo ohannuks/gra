@@ -55,11 +55,13 @@ def list_data_lvk():
     return events
 
 def _get_lvk_strain_individual(event_name, return_data=False):
-    events = check_event_name(event_name)
-    gps = event_gps(event_name)
+    ''' Download strain data for a specific event. '''
+    info = _get_lvk_info_individual(event_name)
+    events = info['event_name']
+    gps = info['gps']
+    detectors = info['detectors']
     typer.echo(f"Event '{event_name}' found with GPS time {gps}.")
     start, end = int(gps - 60*10), int(gps + 60*10)  # 10 minutes before and after
-    detectors = event_detectors(event_name)
     data = {}
     # Make directory for event if it doesn't exist
     if not os.path.exists(event_name):
@@ -93,6 +95,36 @@ def _get_lvk_strain_individual(event_name, return_data=False):
         return data
     else:
         return None
+
+def _get_lvk_info_individual(event_name):
+    ''' Download info data for a specific event and save in the same folder as the strain data. 
+    '''
+    # Make directory for event if it doesn't exist
+    if not os.path.exists(event_name):
+        os.makedirs(event_name)
+    filename = f"{event_name}/{event_name}_info.json"
+    # If the file exists, just load it instead of downloading again
+    if os.path.exists(filename):
+        typer.echo(f"File {filename} already exists.")
+        with open(filename, 'r') as f:
+            import json
+            info = json.load(f)
+            info['detectors'] = set(info['detectors'])  # Convert back to set
+        typer.echo(f"Data loaded from {filename}.")
+        return info
+    events = check_event_name(event_name)
+    gps = event_gps(event_name)
+    detectors = event_detectors(event_name)
+    info = {
+        'event_name': event_name,
+        'gps': gps,
+        'detectors': list(detectors)
+    }
+    with open(filename, 'w') as f:
+        import json
+        json.dump(info, f, indent=4)
+    typer.echo(f"Saved event info to {filename}.")
+    return info
 
 def _get_lvk_strain_all():
     events = _list_lvk_data()
