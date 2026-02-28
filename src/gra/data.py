@@ -14,6 +14,11 @@ from rich.console import Console
 # Add console
 console = Console()
 
+pe_zenodo_releases = {}
+pe_zenodo_releases['GWTC-2.1'] = 'https://zenodo.org/records/17014085'
+pe_zenodo_releases['GWTC-3'] = 'https://zenodo.org/records/17014085'
+pe_zenodo_releases['GWTC-4'] = 'https://zenodo.org/records/17014085'
+
 def remove_duplicates(seq):
     # Each event has multiple versions, so the last bit in the name of '-vX'. We remove it and then remove duplicates.
     seen = set()
