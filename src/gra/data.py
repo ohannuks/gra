@@ -4,6 +4,7 @@ warnings.filterwarnings("ignore", "Wswiglal-redir-stdio")
 from gwosc.datasets import find_datasets, event_gps, event_detectors
 from zenodo_get import download as zenodo_download
 from gwosc.locate import get_event_urls
+import asyncio
 import gwpy
 import gwpy.timeseries
 from lalframe.utils import frtools
@@ -20,7 +21,7 @@ pe_zenodo_releases['GWTC-2.1-confident'] = 'https://zenodo.org/records/6513631'
 pe_zenodo_releases['GWTC-3-confident'] = 'https://zenodo.org/records/5546663'
 pe_zenodo_releases['GWTC-4.0'] = 'https://zenodo.org/records/17014085'
 
-def _get_lvk_pe_data(event_name):
+async def _get_lvk_pe_data(event_name):
     output_dir = f"{event_name}/pe"
     # Create directory if it doesn't exist
     if not os.path.exists(output_dir):
@@ -103,7 +104,7 @@ def list_data_lvk():
     typer.echo(f"\nTotal unique events: {len(events)}")
     return events
 
-def _get_lvk_strain_individual(event_name, return_data=False):
+async def _get_lvk_strain_individual(event_name, return_data=False):
     ''' Download strain data for a specific event. '''
     info = _get_lvk_info_individual(event_name)
     events = info['event_name']
@@ -141,7 +142,7 @@ def _get_lvk_strain_individual(event_name, return_data=False):
         except Exception as e:
             typer.echo(f"Error fetching data for {event_name} with {det}: {e}")
     # Download also PE data:
-    _get_lvk_pe_data(event_name)
+    await _get_lvk_pe_data(event_name)
     if return_data:
         return data
     else:
@@ -177,18 +178,31 @@ def _get_lvk_info_individual(event_name):
     typer.echo(f"Saved event info to {filename}.")
     return info
 
-def _get_lvk_strain_all():
+import concurrent.futures
+
+async def _get_lvk_strain_all():
     events = _list_lvk_data()
-    data_all = {}
-    for event in events:
-        data_all[event] = get_lvk_strain(event)
+    loop = asyncio.get_event_loop()
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        tasks = [loop.run_in_executor(executor, lambda ev=event: asyncio.run(_get_lvk_strain_individual(ev))) for event in events]
+        results = await asyncio.gather(*tasks)
+    data_all = dict(zip(events, results))
     return events, data_all
+
+#async def _get_lvk_strain_all():
+#    events = _list_lvk_data()
+#    tasks = [_get_lvk_strain_individual(event) for event in events]
+#    results = await asyncio.gather(*tasks)
+#    data_all = dict(zip(events, results))
+#    return events, data_all
 
 def get_lvk_strain(event_name: str = typer.Argument(..., help="Name of the event to download strain data for; or 'all' if you want to download for all events")):
     if event_name == 'all':
-        return _get_lvk_strain_all()
+        events, data_all = asyncio.run(_get_lvk_strain_all())
+        return events, data_all
     else:
-        return _get_lvk_strain_individual(event_name)
+        data = asyncio.run(_get_lvk_strain_individual(event_name))
+        return event_name, data
 
 def _get_2mass_spectroscopic(return_data=False):
     from astroquery.vizier import Vizier
