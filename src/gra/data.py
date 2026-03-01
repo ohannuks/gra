@@ -8,6 +8,7 @@ from zenodo_get import download as zenodo_download
 from gwosc.locate import get_event_urls
 import asyncio
 import concurrent.futures
+from functools import partial
 # Time series/reading
 import gwpy.timeseries
 from lalframe.utils import frtools
@@ -27,6 +28,49 @@ pe_zenodo_releases = {}
 pe_zenodo_releases['GWTC-2.1-confident'] = 'https://zenodo.org/records/6513631'
 pe_zenodo_releases['GWTC-3-confident'] = 'https://zenodo.org/records/5546663'
 pe_zenodo_releases['GWTC-4.0'] = 'https://zenodo.org/records/17014085'
+
+async def _get_lvk_pe_data_async(event_name):
+    output_dir = f"{current_dir}/{event_name}"
+    # Check if PE data (hdf5) exists already
+    if any(fname.endswith('.hdf5') for fname in os.listdir(output_dir)):
+        typer.echo(f"PE data for '{event_name}' already exists in {output_dir}. Skipping download.")
+        return
+
+    # 1. Identify which catalog contains the event
+    catalogs = list(pe_zenodo_releases.keys()) + ['O4_Discovery_Papers']
+    catalog = None
+    
+    for cat in catalogs:
+        # find_datasets returns a list of event names in that catalog
+        available_events = find_datasets(type='event', catalog=cat)
+        if any(event_name in event for event in available_events):
+            catalog = cat
+            break
+
+    if catalog is None:
+        typer.echo(f"Event '{event_name}' not found in available catalogs.")
+        raise typer.Exit(code=1)
+   
+    # Define the arguments for zenodo_download
+    glob_pattern = f"*{event_name}*" if catalog == "GWTC-4.0" else f"*{event_name}*nocosmo*.h5"
+    
+    typer.echo(f"Queuing Zenodo download for {event_name}...")
+
+    # Run the blocking zenodo_download in a separate thread to keep the loop free
+    loop = asyncio.get_running_loop()
+    
+    # We use a partial to pass arguments to the executor
+    download_func = partial(
+        zenodo_download,
+        record_id,
+        output_dir=".", 
+        file_glob=glob_pattern
+    )
+
+    # This runs the download in a thread pool and waits for it asynchronously
+    await loop.run_in_executor(None, download_func)
+    
+    typer.echo(f"Finished downloading PE data for {event_name}")
 
 def _get_lvk_pe_data(event_name):
     output_dir = f"{current_dir}/{event_name}"
@@ -63,14 +107,14 @@ def _get_lvk_pe_data(event_name):
             #await async_download(record_id, output_dir=".", file_glob=f"*{event_name}*")
             zenodo_download(
                 record_id, 
-                output_dir=f".", 
+                output_dir=f"{output_dir}", 
                 file_glob=f"*{event_name}*" 
             )
         else:
             #await async_download(record_id, output_dir=".", file_glob=f"*{event_name}*nocosmo*.h5")
             zenodo_download(
                 record_id, 
-                output_dir=f".", 
+                output_dir=f"{output_dir}",
                 file_glob=f"*{event_name}*nocosmo*.h5" 
             )
         typer.echo(f"Download complete. Files saved to: {output_dir}")
@@ -192,21 +236,18 @@ def _get_lvk_info_individual(event_name):
     typer.echo(f"Saved event info to {filename}.")
     return info
 
+def get_lvk_strain_individual_sync(event):
+    # Run the async function in a new event loop (safe in subprocess)
+    return asyncio.run(_get_lvk_strain_individual(event))
+
 async def _get_lvk_strain_all():
     events = _list_lvk_data()
     loop = asyncio.get_event_loop()
-    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
-        tasks = [loop.run_in_executor(executor, lambda ev=event: asyncio.run(_get_lvk_strain_individual(ev))) for event in events]
+    with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor: # FIXME: The ProcessPoolExecutor is used instead of ThreadPoolExecutor because the latter runs into issues with the zenodo's download function, which is not async safe (e.g., uses global variables). A separate process for each download seems to work because it isolates the memory. However, it's not ideal.
+        tasks = [loop.run_in_executor(executor, get_lvk_strain_individual_sync, event) for event in events]
         results = await asyncio.gather(*tasks)
     data_all = dict(zip(events, results))
     return events, data_all
-
-#async def _get_lvk_strain_all():
-#    events = _list_lvk_data()
-#    tasks = [_get_lvk_strain_individual(event) for event in events]
-#    results = await asyncio.gather(*tasks)
-#    data_all = dict(zip(events, results))
-#    return events, data_all
 
 def get_lvk_strain(event_name: str = typer.Argument(..., help="Name of the event to download strain data for; or 'all' if you want to download for all events")):
     if event_name == 'all':
