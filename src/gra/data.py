@@ -1,31 +1,35 @@
-# Imports
+# Get rid of annoying warning about swiglal redir stdio:
 import warnings
 warnings.filterwarnings("ignore", "Wswiglal-redir-stdio")
+# Download I/O related
+import gwpy
 from gwosc.datasets import find_datasets, event_gps, event_detectors
 from zenodo_get import download as zenodo_download
 from gwosc.locate import get_event_urls
 import asyncio
-import gwpy
+import concurrent.futures
+# Time series/reading
 import gwpy.timeseries
 from lalframe.utils import frtools
-import astropy
 import os
+# Computing
+import astropy
 # Typer apps:
 import typer
 from rich.console import Console
 # Add console
 console = Console()
 
+# Get the directory in which we execute the cli script:
+current_dir = os.getcwd()
+
 pe_zenodo_releases = {}
 pe_zenodo_releases['GWTC-2.1-confident'] = 'https://zenodo.org/records/6513631'
 pe_zenodo_releases['GWTC-3-confident'] = 'https://zenodo.org/records/5546663'
 pe_zenodo_releases['GWTC-4.0'] = 'https://zenodo.org/records/17014085'
 
-async def _get_lvk_pe_data(event_name):
-    output_dir = f"{event_name}/pe"
-    # Create directory if it doesn't exist
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+def _get_lvk_pe_data(event_name):
+    output_dir = f"{current_dir}/{event_name}"
     # Check if PE data (hdf5) exists already
     if any(fname.endswith('.hdf5') for fname in os.listdir(output_dir)):
         typer.echo(f"PE data for '{event_name}' already exists in {output_dir}. Skipping download.")
@@ -55,11 +59,20 @@ async def _get_lvk_pe_data(event_name):
         typer.echo(f"Downloading PE data for '{event_name}' from Zenodo record {record_id}...")
         
         # Download files matching the event name (e.g., HDF5 posterior samples)
-        zenodo_download(
-            record_id, 
-            output_dir=f"{event_name}/pe", 
-            file_glob=f"*{event_name}*" 
-        )
+        if catalog == "GWTC-4.0":
+            #await async_download(record_id, output_dir=".", file_glob=f"*{event_name}*")
+            zenodo_download(
+                record_id, 
+                output_dir=f".", 
+                file_glob=f"*{event_name}*" 
+            )
+        else:
+            #await async_download(record_id, output_dir=".", file_glob=f"*{event_name}*nocosmo*.h5")
+            zenodo_download(
+                record_id, 
+                output_dir=f".", 
+                file_glob=f"*{event_name}*nocosmo*.h5" 
+            )
         typer.echo(f"Download complete. Files saved to: {output_dir}")
     else:
         typer.echo(f"No Zenodo release mapping found for catalog '{catalog}'.")
@@ -127,6 +140,7 @@ async def _get_lvk_strain_individual(event_name, return_data=False):
             else:
                 # Read the channel name:
                 #channel_name = gwpy.io.gwf.get_channel_names(filename)[0]  # Assuming only one channel per file
+                print("HERE NOW, EVEN THOUGHWE SHOULDNT BE")
                 channel_name = frtools.get_channels(filename)[0] # Assuming only one channel per file
                 data[det] = gwpy.timeseries.TimeSeries.read(filename, format='gwf', channel=channel_name)
                 typer.echo(f"Data loaded from {filename}.")
@@ -142,7 +156,7 @@ async def _get_lvk_strain_individual(event_name, return_data=False):
         except Exception as e:
             typer.echo(f"Error fetching data for {event_name} with {det}: {e}")
     # Download also PE data:
-    await _get_lvk_pe_data(event_name)
+    _get_lvk_pe_data(event_name)
     if return_data:
         return data
     else:
@@ -178,12 +192,10 @@ def _get_lvk_info_individual(event_name):
     typer.echo(f"Saved event info to {filename}.")
     return info
 
-import concurrent.futures
-
 async def _get_lvk_strain_all():
     events = _list_lvk_data()
     loop = asyncio.get_event_loop()
-    with concurrent.futures.ThreadPoolExecutor() as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
         tasks = [loop.run_in_executor(executor, lambda ev=event: asyncio.run(_get_lvk_strain_individual(ev))) for event in events]
         results = await asyncio.gather(*tasks)
     data_all = dict(zip(events, results))
