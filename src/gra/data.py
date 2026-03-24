@@ -161,7 +161,7 @@ def list_data_lvk():
     typer.echo(f"\nTotal unique events: {len(events)}")
     return events
 
-async def _get_lvk_strain_individual(event_name, return_data=False):
+async def _get_lvk_strain_individual(event_name, return_data=False, download_pe=False):
     ''' Download strain data for a specific event. '''
     info = _get_lvk_info_individual(event_name)
     events = info['event_name']
@@ -200,7 +200,8 @@ async def _get_lvk_strain_individual(event_name, return_data=False):
         except Exception as e:
             typer.echo(f"Error fetching data for {event_name} with {det}: {e}")
     # Download also PE data:
-    _get_lvk_pe_data(event_name)
+    if download_pe == True:
+        _get_lvk_pe_data(event_name)
     if return_data:
         return data
     else:
@@ -243,7 +244,7 @@ def get_lvk_strain_individual_sync(event):
 async def _get_lvk_strain_all():
     events = _list_lvk_data()
     loop = asyncio.get_event_loop()
-    with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor: # FIXME: The ProcessPoolExecutor is used instead of ThreadPoolExecutor because the latter runs into issues with the zenodo's download function, which is not async safe (e.g., uses global variables). A separate process for each download seems to work because it isolates the memory. However, it's not ideal.
+    with concurrent.futures.ProcessPoolExecutor(max_workers=32) as executor: # FIXME: The ProcessPoolExecutor is used instead of ThreadPoolExecutor because the latter runs into issues with the zenodo's download function, which is not async safe (e.g., uses global variables). A separate process for each download seems to work because it isolates the memory. However, it's not ideal.
         tasks = [loop.run_in_executor(executor, get_lvk_strain_individual_sync, event) for event in events]
         results = await asyncio.gather(*tasks)
     data_all = dict(zip(events, results))
