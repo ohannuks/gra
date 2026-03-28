@@ -18,4 +18,20 @@ def plot_strain(data):
         ax[i].legend()
     ax[-1].set_xlabel('Time (s)')
     return fig, ax
+def plot_psd(psds, fig=None):
+    detectors = psds.keys()
+    if fig == None:
+        fig, ax = plt.subplots(len(detectors), 1, figsize=(10, 2*len(detectors)), sharex=True)
+    else:
+        ax = fig.get_axes()
+    # Make sure ax is always a list, even if there's only one detector
+    if len(detectors) == 1:
+        ax = [ax]
+    for i, det in enumerate(detectors):
+        f, psd = np.transpose(psds[det])
+        ax[i].loglog(f, psd, label=det)
+        ax[i].set_ylabel('PSD')
+        ax[i].legend()
+    ax[-1].set_xlabel('Frequency (Hz)')
+    return fig, ax
 

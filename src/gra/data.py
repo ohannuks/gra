@@ -1,7 +1,10 @@
 # Get rid of annoying warning about swiglal redir stdio:
 import warnings
 warnings.filterwarnings("ignore", "Wswiglal-redir-stdio")
+# General
+import numpy as np
 # Download I/O related
+import h5py
 import gwpy
 from gwosc.datasets import find_datasets, event_gps, event_detectors
 from zenodo_get import download as zenodo_download
@@ -331,7 +334,72 @@ def _process_timeseries(event_name):
     fig, ax = plots.plot_strain(data); fig.savefig(f"{event_name}/{event_name}_strain.pdf", bbox_inches='tight')
     return None
 
+def h5_to_dict(h5_obj):
+    result = {}
+    for key, item in h5_obj.items():
+        if isinstance(item, h5py.Dataset):
+            result[key] = item[()]  # Load dataset into memory
+        elif isinstance(item, h5py.Group):
+            result[key] = h5_to_dict(item)  # Recurse into group
+    return result
+
+def _load_pe_samples(event_name):
+    # Look for hdf5 or h5 files in the event folder:
+    output_dir = f"{current_dir}/{event_name}"
+    pe_files = [fname for fname in os.listdir(output_dir) if fname.endswith('.hdf5') or fname.endswith('.h5')]
+    if len(pe_files) == 0:
+        typer.echo(f"No PE files found for event '{event_name}' in {output_dir}.")
+        return None
+    elif len(pe_files) > 1:
+        typer.echo(f"Multiple PE files found for event '{event_name}' in {output_dir}. Using the first one: {pe_files[0]}")
+    pe_file = pe_files[0]
+    pe_path = os.path.join(output_dir, pe_file)
+    print("pe_path:", pe_path)
+    # Load the PE samples using h5py
+    with h5py.File(pe_path, 'r') as f:
+        # Dataset is stored in one of the waveform approximants. In order of preference, use NRSur7dq4, then SEOBNRv4PHM, then IMRPhenomXPHM, then IMRPhenomPv2, then IMRPhenomD. 
+        approximants = ['NRSur7dq4', 'SEOBNRv4PHM', 'IMRPhenomXPHM', 'IMRPhenomPv2', 'IMRPhenomD']
+        approximants = [f"C00:{approx}" for approx in approximants] + approximants # Add "C00:" prefix versions of the approximants to the list:
+        dataset = None
+        for approx in approximants:
+            if approx in f:
+                dataset = f[approx]
+                break
+        if dataset is None:
+            typer.echo(f"WARNING: No known approximant found in PE file for event '{event_name}'. Available approximants: {list(f.keys())}")
+            return None
+        # Convert the dataset to a dictionary:
+        pe_samples = h5_to_dict(dataset)
+        typer.echo(f"Loaded PE samples from {pe_path} using approximant {approx}.")
+    return pe_samples
+
+
+
+def _process_psd_official(event_name):
+    # Load the strain data for the event
+    info = _get_lvk_info_individual(event_name)
+    detectors = info['detectors']
+    # Get the parameter estimation samples:
+    pe_samples = _load_pe_samples(event_name)
+    if pe_samples is None:
+        typer.echo(f"Cannot process PSD for event '{event_name}' because PE samples could not be loaded.")
+        return None
+    # Get the 'psd'
+    psds = pe_samples['psds']
+    for det in detectors:
+        if det in psds:
+            f, psd = np.transpose(psds[det])
+            # Save the PSD as a numpy file:
+            np.save(f"{event_name}/{event_name}_{det}_psd.npy", psd)
+            typer.echo(f"Saved PSD for {det} to {event_name}/{event_name}_{det}_psd.npy")
+        else:
+            typer.echo(f"WARNING: No PSD found for detector '{det}' in PE samples for event '{event_name}'. Available detectors in PE samples: {list(psds.keys())}")
+    from . import plots
+    fig, ax = plots.plot_psd(psds); fig.savefig(f"{event_name}/{event_name}_psd.pdf", bbox_inches='tight')
+    return psds
+
 def process_lvk_event(event_name):
     _process_timeseries(event_name)
+    _process_psd_official(event_name)
     return None
 
