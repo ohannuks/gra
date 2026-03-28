@@ -19,6 +19,7 @@ dependencies = [
     "ler>=0.5.9",
     "numpy>=2.4.1",
     "rich>=14.3.3",
+    "scienceplots>=2.2.1",
     "typer-slim>=0.24.0",
     "zenodo-get>=3.0.0",
 ]

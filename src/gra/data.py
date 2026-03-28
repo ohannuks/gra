@@ -184,7 +184,6 @@ async def _get_lvk_strain_individual(event_name, return_data=False, download_pe=
             else:
                 # Read the channel name:
                 #channel_name = gwpy.io.gwf.get_channel_names(filename)[0]  # Assuming only one channel per file
-                print("HERE NOW, EVEN THOUGHWE SHOULDNT BE")
                 channel_name = frtools.get_channels(filename)[0] # Assuming only one channel per file
                 data[det] = gwpy.timeseries.TimeSeries.read(filename, format='gwf', channel=channel_name)
                 typer.echo(f"Data loaded from {filename}.")
@@ -312,12 +311,27 @@ def _get_2mass_spectroscopic(return_data=False):
 def _get_2mass_individual(event_name):
     raise ValueError("Not implemented yet; only `all` is supported")
 
-def get_2mass_data(event_name: str = typer.Argument(..., help="Name of the event to download 2MASS data for; otherwise 'spectorscopic' to download the spectroscopic 3D 2MASS catalog")):
+def get_2mass_data(event_name):
     if event_name == 'spectroscopic':
         return _get_2mass_spectroscopic()
     else:
         return _get_2mass_individual(event_name)
 
-def get_pe(event_name: str = typer.Argument(..., help="Name of the event to download PE data for")):
+def get_pe(event_name):
     events = check_event_name(event_name)
     datasets = find_datasets(type='pe', event_name=event_name)
+
+def _process_timeseries(event_name):
+    # Load the strain data for the event
+    info = _get_lvk_info_individual(event_name)
+    detectors = info['detectors']
+    # Get the lvk strain data (use existing functions):
+    data = asyncio.run(_get_lvk_strain_individual(event_name, return_data=True, download_pe=False))
+    print(data)
+    from . import plots
+    fig, ax = plots.plot_strain(data); fig.savefig(f"{event_name}/{event_name}_strain.pdf", bbox_inches='tight')
+
+def process_lvk_event(event_name):
+    _process_timeseries(event_name)
+    return None
+

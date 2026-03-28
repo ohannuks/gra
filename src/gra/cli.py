@@ -10,6 +10,8 @@ data_ls_app = typer.Typer(help="List available data files.")
 
 data_inject_lvk_app = typer.Typer(help="Create injection data with either real or simulated noise from the LVK catalogs.")
 
+data_process_app = typer.Typer(help="Process data files, e.g. produce the PSD, make figures of the data, etc.")
+
 data_ls_lvk_app = typer.Typer(help="List available data files from the LVK catalogs.")
 
 # Add subcommands to data_app
@@ -17,14 +19,9 @@ app.add_typer(data_app, name="data")
 # data [get/inject/ls]
 data_app.add_typer(data_get_app, name="get")
 data_app.add_typer(data_inject_app, name="inject")
+data_app.add_typer(data_process_app, name="process")
 data_app.add_typer(data_ls_app, name="ls")
 ##############################
-
-@data_ls_app.command("lvk")
-def list_data_lvk():
-    """ List available data files. """
-    from . import data
-    return data.list_data_lvk()
 
 @data_get_app.command("lvk")
 def get_lvk_strain(
@@ -41,6 +38,18 @@ def get_lvk_strain(
 def get_2mass_data(event_name: str = typer.Argument(..., help="Name of the event to download 2MASS data for")):
     from . import data
     return data.get_2mass_data(event_name)
+
+@data_process_app.command("lvk")
+def process_lvk_event(event_name: str = typer.Argument(..., help="Name of the event to process data for")):
+    """ Process data for a specific event. """
+    from . import data
+    return data.process_lvk_event(event_name)
+
+@data_ls_app.command("lvk")
+def list_data_lvk():
+    """ List available data files. """
+    from . import data
+    return data.list_data_lvk()
 
 def main():
     app()
