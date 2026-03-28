@@ -30,6 +30,8 @@ def plot_psd(psds, fig=None):
     for i, det in enumerate(detectors):
         f, psd = np.transpose(psds[det])
         ax[i].loglog(f, psd, label=det)
+        fmin, fmax = 10, 2048
+        ax[i].set_xlim(fmin, fmax)
         ax[i].set_ylabel('PSD')
         ax[i].legend()
     ax[-1].set_xlabel('Frequency (Hz)')
