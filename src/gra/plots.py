@@ -11,9 +11,10 @@ def plot_strain(data):
         ax = [ax]
     for i, det in enumerate(detectors):
         strain_data = data[det] # Time series object (gwpy)
-        time = strain_data.times
+        time = strain_data.times.value
         strain = strain_data.value
         ax[i].plot(time, strain, label=det)
+        plt.xlim(time[0], time[-1])
         ax[i].set_ylabel('Strain')
         ax[i].legend()
     ax[-1].set_xlabel('Time (s)')
@@ -32,6 +33,7 @@ def plot_psd(psds, fig=None):
         ax[i].loglog(f, psd, label=det)
         fmin, fmax = 10, 2048
         ax[i].set_xlim(fmin, fmax)
+        ax[i].set_ylim(1e-48, 1e-44)
         ax[i].set_ylabel('PSD')
         ax[i].legend()
     ax[-1].set_xlabel('Frequency (Hz)')
