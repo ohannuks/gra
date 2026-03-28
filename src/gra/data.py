@@ -237,25 +237,25 @@ def _get_lvk_info_individual(event_name):
     typer.echo(f"Saved event info to {filename}.")
     return info
 
-def get_lvk_strain_individual_sync(event):
+def get_lvk_strain_individual_sync(event, download_pe=False):
     # Run the async function in a new event loop (safe in subprocess)
-    return asyncio.run(_get_lvk_strain_individual(event))
+    return asyncio.run(_get_lvk_strain_individual(event,download_pe=download_pe))
 
-async def _get_lvk_strain_all():
+async def _get_lvk_strain_all(download_pe=False):
     events = _list_lvk_data()
     loop = asyncio.get_event_loop()
     with concurrent.futures.ProcessPoolExecutor(max_workers=32) as executor: # FIXME: The ProcessPoolExecutor is used instead of ThreadPoolExecutor because the latter runs into issues with the zenodo's download function, which is not async safe (e.g., uses global variables). A separate process for each download seems to work because it isolates the memory. However, it's not ideal.
-        tasks = [loop.run_in_executor(executor, get_lvk_strain_individual_sync, event) for event in events]
+        tasks = [loop.run_in_executor(executor, get_lvk_strain_individual_sync, event, download_pe) for event in events]
         results = await asyncio.gather(*tasks)
     data_all = dict(zip(events, results))
     return events, data_all
 
-def get_lvk_strain(event_name: str = typer.Argument(..., help="Name of the event to download strain data for; or 'all' if you want to download for all events")):
+def get_lvk_strain(event_name, download_pe):
     if event_name == 'all':
-        events, data_all = asyncio.run(_get_lvk_strain_all())
+        events, data_all = asyncio.run(_get_lvk_strain_all(download_pe=download_pe))
         return events, data_all
     else:
-        data = asyncio.run(_get_lvk_strain_individual(event_name))
+        data = asyncio.run(_get_lvk_strain_individual(event_name, download_pe=download_pe))
         return event_name, data
 
 def _get_2mass_spectroscopic(return_data=False):

@@ -27,9 +27,11 @@ def list_data_lvk():
     return data.list_data_lvk()
 
 @data_get_app.command("lvk")
-def get_lvk_strain(event_name: str = typer.Argument(..., help="Name of the event to download strain data for; or 'all' if you want to download for all events")):
+def get_lvk_strain(
+        event_name: str = typer.Argument(..., help="Name of the event to download strain data for; or 'all' if you want to download for all events"), 
+        download_pe: bool = typer.Option(False, "--download-pe", help="Whether to also download the PE samples for the event(s)")):
     from . import data
-    return data.get_lvk_strain(event_name)
+    return data.get_lvk_strain(event_name, download_pe)
 
 @data_get_app.command("2mass")
 def get_2mass_data(event_name: str = typer.Argument(..., help="Name of the event to download 2MASS data for")):
