@@ -327,9 +327,9 @@ def _process_timeseries(event_name):
     detectors = info['detectors']
     # Get the lvk strain data (use existing functions):
     data = asyncio.run(_get_lvk_strain_individual(event_name, return_data=True, download_pe=False))
-    print(data)
     from . import plots
     fig, ax = plots.plot_strain(data); fig.savefig(f"{event_name}/{event_name}_strain.pdf", bbox_inches='tight')
+    return None
 
 def process_lvk_event(event_name):
     _process_timeseries(event_name)
