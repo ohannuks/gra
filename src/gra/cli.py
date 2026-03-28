@@ -29,8 +29,12 @@ def list_data_lvk():
 @data_get_app.command("lvk")
 def get_lvk_strain(
         event_name: str = typer.Argument(..., help="Name of the event to download strain data for; or 'all' if you want to download for all events"), 
-        download_pe: bool = typer.Option(False, "--download-pe", help="Whether to also download the PE samples for the event(s)")):
+        no_pe: bool = typer.Option(False, "--no-pe", help="Do not download parameter estimation samples")):
     from . import data
+    if no_pe:
+        download_pe = False
+    else:
+        download_pe = True
     return data.get_lvk_strain(event_name, download_pe)
 
 @data_get_app.command("2mass")
