@@ -22,7 +22,7 @@ def plot_strain(data):
 def plot_psd(psds, fig=None):
     detectors = psds.keys()
     if fig == None:
-        fig, ax = plt.subplots(len(detectors), 1, figsize=(10, 2*len(detectors)), sharex=True)
+        fig, ax = plt.subplots(1, len(detectors), figsize=(10, 2*len(detectors)), sharex=True)
     else:
         ax = fig.get_axes()
     # Make sure ax is always a list, even if there's only one detector
