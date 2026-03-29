@@ -164,21 +164,24 @@ def list_data_lvk():
     typer.echo(f"\nTotal unique events: {len(events)}")
     return events
 
-async def _get_lvk_strain_individual(event_name, return_data=False, download_pe=False):
+async def _get_lvk_strain_individual(event_name, return_data=False, download_pe=False, segment_length=60*20):
     ''' Download strain data for a specific event. '''
     info = _get_lvk_info_individual(event_name)
     events = info['event_name']
     gps = info['gps']
     detectors = info['detectors']
     typer.echo(f"Event '{event_name}' found with GPS time {gps}.")
-    start, end = int(gps - 60*10), int(gps + 60*10)  # 10 minutes before and after
+    start, end = int(gps - segment_length/2), int(gps + segment_length/2)  # 10 minutes before and after
     data = {}
     # Make directory for event if it doesn't exist
     if not os.path.exists(event_name):
         os.makedirs(event_name)
     typer.echo(f"Downloading strain data for detectors: {', '.join(detectors)}")
     for det in detectors:
-        filename = f"{event_name}/{event_name}_{det}_strain.gwf"
+        if segment_length == 60*20:
+            filename = f"{event_name}/{event_name}_{det}_strain.gwf"
+        else:
+            filename = f"{event_name}/{event_name}_{det}_strain_{segment_length//60}min.gwf"
         # If the file exists, just load it instead of downloading again
         if os.path.exists(filename):
             typer.echo(f"File {filename} already exists.")
@@ -239,25 +242,25 @@ def _get_lvk_info_individual(event_name):
     typer.echo(f"Saved event info to {filename}.")
     return info
 
-def get_lvk_strain_individual_sync(event, download_pe=False):
+def get_lvk_strain_individual_sync(event, download_pe=False, segment_length=60*20):
     # Run the async function in a new event loop (safe in subprocess)
-    return asyncio.run(_get_lvk_strain_individual(event,download_pe=download_pe))
+    return asyncio.run(_get_lvk_strain_individual(event,download_pe=download_pe, segment_length=segment_length))
 
-async def _get_lvk_strain_all(download_pe=False):
+async def _get_lvk_strain_all(download_pe=False, segment_length=60*20):
     events = _list_lvk_data()
     loop = asyncio.get_event_loop()
     with concurrent.futures.ProcessPoolExecutor(max_workers=32) as executor: # FIXME: The ProcessPoolExecutor is used instead of ThreadPoolExecutor because the latter runs into issues with the zenodo's download function, which is not async safe (e.g., uses global variables). A separate process for each download seems to work because it isolates the memory. However, it's not ideal.
-        tasks = [loop.run_in_executor(executor, get_lvk_strain_individual_sync, event, download_pe) for event in events]
+        tasks = [loop.run_in_executor(executor, get_lvk_strain_individual_sync, event, download_pe, segment_length) for event in events]
         results = await asyncio.gather(*tasks)
     data_all = dict(zip(events, results))
     return events, data_all
 
-def get_lvk_strain(event_name, download_pe):
+def get_lvk_strain(event_name, download_pe, segment_length=60*20):
     if event_name == 'all':
-        events, data_all = asyncio.run(_get_lvk_strain_all(download_pe=download_pe))
+        events, data_all = asyncio.run(_get_lvk_strain_all(download_pe=download_pe, segment_length=segment_length))
         return events, data_all
     else:
-        data = asyncio.run(_get_lvk_strain_individual(event_name, download_pe=download_pe))
+        data = asyncio.run(_get_lvk_strain_individual(event_name, download_pe=download_pe, segment_length=segment_length))
         return event_name, data
 
 def _get_2mass_spectroscopic(return_data=False):

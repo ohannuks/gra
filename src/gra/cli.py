@@ -26,13 +26,15 @@ data_app.add_typer(data_ls_app, name="ls")
 @data_get_app.command("lvk")
 def get_lvk_strain(
         event_name: str = typer.Argument(..., help="Name of the event to download strain data for; or 'all' if you want to download for all events"), 
-        no_pe: bool = typer.Option(False, "--no-pe", help="Do not download parameter estimation samples")):
+        no_pe: bool = typer.Option(False, "--no-pe", help="Do not download parameter estimation samples"),
+        segment_length: int = typer.Option(1200, "--segment-length", help="Total length of the data segment to download in seconds around the trigger time of the event, default is +- 10 minutes (60*20 seconds)"),
+        ):
     from . import data
     if no_pe:
         download_pe = False
     else:
         download_pe = True
-    return data.get_lvk_strain(event_name, download_pe)
+    return data.get_lvk_strain(event_name, download_pe, segment_length)
 
 @data_get_app.command("2mass")
 def get_2mass_data(event_name: str = typer.Argument(..., help="Name of the event to download 2MASS data for")):
