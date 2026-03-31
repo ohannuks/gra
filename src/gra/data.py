@@ -1,277 +1,40 @@
-# Get rid of annoying warning about swiglal redir stdio:
-import warnings
-warnings.filterwarnings("ignore", "Wswiglal-redir-stdio")
-# General
-import numpy as np
-# Download I/O related
-import h5py
-import gwpy
-from gwosc.datasets import find_datasets, event_gps, event_detectors
-from zenodo_get import download as zenodo_download
-from gwosc.locate import get_event_urls
-import asyncio
-import concurrent.futures
-from functools import partial
-# Time series/reading
-import gwpy.timeseries
-from lalframe.utils import frtools
+"""
+Gravitational-wave research assistant – data layer.
+
+This module is the public data API consumed by ``cli.py``.  It is intentionally
+thin: LVK-specific logic lives in ``data_lvk``, and this file adds the 2MASS
+galaxy-catalogue helpers alongside re-exports so that call sites never need to
+know which sub-module owns a function.
+
+Structure
+---------
+data.py          – 2MASS helpers + public re-exports (this file)
+data_lvk.py      – All LVK strain / PE / processing logic
+
+Public API
+----------
+    get_lvk_strain(event_name, download_pe, segment_length)  [from data_lvk]
+    list_data_lvk()                                          [from data_lvk]
+    process_lvk_event(event_name)                            [from data_lvk]
+    get_2mass_data(event_name)
+"""
+
 import os
-# Computing
 import astropy
-# Typer apps:
 import typer
 from rich.console import Console
-# Add console
+from .data_lvk import get_lvk_strain, list_data_lvk, process_lvk_event
+
 console = Console()
 
-# Get the directory in which we execute the cli script:
-current_dir = os.getcwd()
-
-pe_zenodo_releases = {}
-pe_zenodo_releases['GWTC-2.1-confident'] = 'https://zenodo.org/records/6513631'
-pe_zenodo_releases['GWTC-3-confident'] = 'https://zenodo.org/records/5546663'
-pe_zenodo_releases['GWTC-4.0'] = 'https://zenodo.org/records/17014085'
-
-async def _get_lvk_pe_data_async(event_name):
-    output_dir = f"{current_dir}/{event_name}"
-    # Check if PE data (hdf5) exists already
-    if any(fname.endswith('.hdf5') for fname in os.listdir(output_dir)):
-        typer.echo(f"PE data for '{event_name}' already exists in {output_dir}. Skipping download.")
-        return
-
-    # 1. Identify which catalog contains the event
-    catalogs = list(pe_zenodo_releases.keys()) + ['O4_Discovery_Papers']
-    catalog = None
-    
-    for cat in catalogs:
-        # find_datasets returns a list of event names in that catalog
-        available_events = find_datasets(type='event', catalog=cat)
-        if any(event_name in event for event in available_events):
-            catalog = cat
-            break
-
-    if catalog is None:
-        typer.echo(f"Event '{event_name}' not found in available catalogs.")
-        raise typer.Exit(code=1)
-   
-    # Define the arguments for zenodo_download
-    glob_pattern = f"*{event_name}*" if catalog == "GWTC-4.0" else f"*{event_name}*nocosmo*.h5"
-    
-    typer.echo(f"Queuing Zenodo download for {event_name}...")
-
-    # Run the blocking zenodo_download in a separate thread to keep the loop free
-    loop = asyncio.get_running_loop()
-    
-    # We use a partial to pass arguments to the executor
-    download_func = partial(
-        zenodo_download,
-        record_id,
-        output_dir=".", 
-        file_glob=glob_pattern
-    )
-
-    # This runs the download in a thread pool and waits for it asynchronously
-    await loop.run_in_executor(None, download_func)
-    
-    typer.echo(f"Finished downloading PE data for {event_name}")
-
-def _get_lvk_pe_data(event_name):
-    output_dir = f"{current_dir}/{event_name}"
-    # Check if PE data (hdf5) exists already
-    if any(fname.endswith('.hdf5') for fname in os.listdir(output_dir)):
-        typer.echo(f"PE data for '{event_name}' already exists in {output_dir}. Skipping download.")
-        return
-
-    # 1. Identify which catalog contains the event
-    catalogs = list(pe_zenodo_releases.keys()) + ['O4_Discovery_Papers']
-    catalog = None
-    
-    for cat in catalogs:
-        # find_datasets returns a list of event names in that catalog
-        available_events = find_datasets(type='event', catalog=cat)
-        if any(event_name in event for event in available_events):
-            catalog = cat
-            break
-
-    if catalog is None:
-        typer.echo(f"Event '{event_name}' not found in available catalogs.")
-        raise typer.Exit(code=1)
-
-    # 2. Extract Record ID and download from Zenodo
-    if catalog in pe_zenodo_releases:
-        zenodo_url = pe_zenodo_releases[catalog]
-        # Extract the numeric record ID from the end of the URL
-        record_id = zenodo_url.split('/')[-1]
-        
-        typer.echo(f"Downloading PE data for '{event_name}' from Zenodo record {record_id}...")
-        
-        # Download files matching the event name (e.g., HDF5 posterior samples)
-        if catalog == "GWTC-4.0":
-            #await async_download(record_id, output_dir=".", file_glob=f"*{event_name}*")
-            zenodo_download(
-                record_id, 
-                output_dir=f"{output_dir}", 
-                file_glob=f"*{event_name}*" 
-            )
-        else:
-            #await async_download(record_id, output_dir=".", file_glob=f"*{event_name}*nocosmo*.h5")
-            zenodo_download(
-                record_id, 
-                output_dir=f"{output_dir}",
-                file_glob=f"*{event_name}*nocosmo*.h5" 
-            )
-        typer.echo(f"Download complete. Files saved to: {output_dir}")
-    else:
-        typer.echo(f"No Zenodo release mapping found for catalog '{catalog}'.")
-
-def remove_duplicates(seq):
-    # Each event has multiple versions, so the last bit in the name of '-vX'. We remove it and then remove duplicates.
-    seen = set()
-    result = []
-    for item in seq:
-        item_base = item.rsplit('-v', 1)[0]  # Remove version suffix
-        if item_base not in seen:
-            seen.add(item_base)
-            result.append(item_base)
-    return result
-
-def _list_lvk_data():
-    """ List available data files. """
-    catalogs = ['GWTC-1-confident', 
-                'GWTC-2.1-confident', 
-                'GWTC-3-confident',
-                'GWTC-4.0',
-                'O4_Discovery_Papers']
-    events_all = []
-    for catalog in catalogs:
-        events = find_datasets(type='events', catalog=catalog)
-        events = remove_duplicates(events)
-        events_all.extend(events)
-    return events_all
-
-def check_event_name(event_name):
-    events = _list_lvk_data()
-    if event_name not in events:
-        typer.echo(f"Event '{event_name}' not found in available events.")
-        raise typer.Exit(code=1)
-    return events
-
-def list_data_lvk():
-    """ List available data files. """
-    events = _list_lvk_data()
-    for event in events:
-        typer.echo(event)
-    typer.echo(f"\nTotal unique events: {len(events)}")
-    return events
-
-async def _get_lvk_strain_individual(event_name, return_data=False, download_pe=False, segment_length=60*20):
-    ''' Download strain data for a specific event. '''
-    info = _get_lvk_info_individual(event_name)
-    events = info['event_name']
-    gps = info['gps']
-    detectors = info['detectors']
-    typer.echo(f"Event '{event_name}' found with GPS time {gps}.")
-    start, end = int(gps - segment_length/2), int(gps + segment_length/2)  # 10 minutes before and after
-    data = {}
-    # Make directory for event if it doesn't exist
-    if not os.path.exists(event_name):
-        os.makedirs(event_name)
-    typer.echo(f"Downloading strain data for detectors: {', '.join(detectors)}")
-    for det in detectors:
-        if segment_length == 60*20:
-            filename = f"{event_name}/{event_name}_{det}_strain.gwf"
-        else:
-            filename = f"{event_name}/{event_name}_{det}_strain_{segment_length//60}min.gwf"
-        # If the file exists, just load it instead of downloading again
-        if os.path.exists(filename):
-            typer.echo(f"File {filename} already exists.")
-            if return_data == False:
-                continue
-            else:
-                # Read the channel name:
-                #channel_name = gwpy.io.gwf.get_channel_names(filename)[0]  # Assuming only one channel per file
-                channel_name = frtools.get_channels(filename)[0] # Assuming only one channel per file
-                data[det] = gwpy.timeseries.TimeSeries.read(filename, format='gwf', channel=channel_name)
-                typer.echo(f"Data loaded from {filename}.")
-                continue
-        typer.echo(f"Fetching {det} data from {start} to {end}...")
-        try:
-            data[det] = gwpy.timeseries.TimeSeries.fetch_open_data(det, start, end, cache=True)
-            # Set channel name to {det}:GWOSC-STRAIN 
-            data[det].channel = f"{det}:GWOSC-STRAIN"
-            data[det].write(filename, format='gwf')
-            channel_name = data[det].channel
-            typer.echo(f"Saved strain data to {filename} with channel {channel_name}.")
-        except Exception as e:
-            typer.echo(f"Error fetching data for {event_name} with {det}: {e}")
-    # Download also PE data:
-    if download_pe == True:
-        _get_lvk_pe_data(event_name)
-    if return_data:
-        return data
-    else:
-        return None
-
-def _get_lvk_info_individual(event_name):
-    ''' Download info data for a specific event and save in the same folder as the strain data. 
-    '''
-    # Make directory for event if it doesn't exist
-    if not os.path.exists(event_name):
-        os.makedirs(event_name)
-    filename = f"{event_name}/{event_name}_info.json"
-    # If the file exists, just load it instead of downloading again
-    if os.path.exists(filename):
-        typer.echo(f"File {filename} already exists.")
-        with open(filename, 'r') as f:
-            import json
-            info = json.load(f)
-            info['detectors'] = set(info['detectors'])  # Convert back to set
-        typer.echo(f"Data loaded from {filename}.")
-        return info
-    events = check_event_name(event_name)
-    gps = event_gps(event_name)
-    detectors = event_detectors(event_name)
-    info = {
-        'event_name': event_name,
-        'gps': gps,
-        'detectors': list(detectors)
-    }
-    with open(filename, 'w') as f:
-        import json
-        json.dump(info, f, indent=4)
-    typer.echo(f"Saved event info to {filename}.")
-    return info
-
-def get_lvk_strain_individual_sync(event, download_pe=False, segment_length=60*20):
-    # Run the async function in a new event loop (safe in subprocess)
-    return asyncio.run(_get_lvk_strain_individual(event,download_pe=download_pe, segment_length=segment_length))
-
-async def _get_lvk_strain_all(download_pe=False, segment_length=60*20):
-    events = _list_lvk_data()
-    loop = asyncio.get_event_loop()
-    with concurrent.futures.ProcessPoolExecutor(max_workers=32) as executor: # FIXME: The ProcessPoolExecutor is used instead of ThreadPoolExecutor because the latter runs into issues with the zenodo's download function, which is not async safe (e.g., uses global variables). A separate process for each download seems to work because it isolates the memory. However, it's not ideal.
-        tasks = [loop.run_in_executor(executor, get_lvk_strain_individual_sync, event, download_pe, segment_length) for event in events]
-        results = await asyncio.gather(*tasks)
-    data_all = dict(zip(events, results))
-    return events, data_all
-
-def get_lvk_strain(event_name, download_pe, segment_length=60*20):
-    if event_name == 'all':
-        events, data_all = asyncio.run(_get_lvk_strain_all(download_pe=download_pe, segment_length=segment_length))
-        return events, data_all
-    else:
-        data = asyncio.run(_get_lvk_strain_individual(event_name, download_pe=download_pe, segment_length=segment_length))
-        return event_name, data
 
 def _get_2mass_spectroscopic(return_data=False):
     from astroquery.vizier import Vizier
     from astropy.table import Table
- 
-    # Create a folder if it doesn't exist
+
     if not os.path.exists("2mass"):
         os.makedirs("2mass")
     filename = "2mass/2mass_galaxy_catalog_spec.csv"
-    # If the file exists, just load it instead of downloading again
     if os.path.exists(filename):
         typer.echo(f"File {filename} already exists.")
         if return_data == False:
@@ -281,128 +44,42 @@ def _get_2mass_spectroscopic(return_data=False):
             typer.echo(f"Data loaded from {filename}.")
             return data_table
 
-    # 1. Configure the Vizier query
-    # We set the row limit to -1 to get the full catalog (~43k sources)
+    # Configure the Vizier query; row limit -1 to get the full catalog (~43k sources)
     v = Vizier(catalog="J/ApJS/199/26", columns=["2MRS", "RAJ2000", "DEJ2000", "cz"])
     v.ROW_LIMIT = -1
-    
-    # 2. Fetch the catalog
+
     typer.echo(f"Downloading 2MRS Catalog... this may take a moment.")
     result = v.get_catalogs("J/ApJS/199/26")
-    
-    # 3. Access the primary table (typically the first index)
+
     if result:
         m2rs_table = result[0]
-        # Add z column from cz (redshift = velocity / speed of light)
         cz_column = m2rs_table['cz']
         speed_of_light_km_s = astropy.constants.c.to('km/s').value
         m2rs_table['z'] = cz_column / speed_of_light_km_s
-        
-        # 4. Display summary
+
         typer.echo(f"Successfully downloaded {len(m2rs_table)} sources.")
-        typer.echo(m2rs_table[:10])  # Show first 10 rows
-        
-        # Save to a local CSV file:
+        typer.echo(m2rs_table[:10])
+
         m2rs_table.write(filename, format="ascii.csv", overwrite=True)
         typer.echo(f"Catalog saved to {filename}")
         data_table = m2rs_table
     else:
         typer.echo("No data found.")
         data_table = None
+
     if return_data == False:
         return None
     else:
         return data_table
 
+
 def _get_2mass_individual(event_name):
     raise ValueError("Not implemented yet; only `all` is supported")
+
 
 def get_2mass_data(event_name):
     if event_name == 'spectroscopic':
         return _get_2mass_spectroscopic()
     else:
         return _get_2mass_individual(event_name)
-
-def get_pe(event_name):
-    events = check_event_name(event_name)
-    datasets = find_datasets(type='pe', event_name=event_name)
-
-def _process_timeseries(event_name):
-    # Load the strain data for the event
-    info = _get_lvk_info_individual(event_name)
-    detectors = info['detectors']
-    # Get the lvk strain data (use existing functions):
-    data = asyncio.run(_get_lvk_strain_individual(event_name, return_data=True, download_pe=False))
-    from . import plots
-    fig, ax = plots.plot_strain(data); fig.savefig(f"{event_name}/{event_name}_strain.pdf", bbox_inches='tight')
-    return None
-
-def h5_to_dict(h5_obj):
-    result = {}
-    for key, item in h5_obj.items():
-        if isinstance(item, h5py.Dataset):
-            result[key] = item[()]  # Load dataset into memory
-        elif isinstance(item, h5py.Group):
-            result[key] = h5_to_dict(item)  # Recurse into group
-    return result
-
-def _load_pe_samples(event_name):
-    # Look for hdf5 or h5 files in the event folder:
-    output_dir = f"{current_dir}/{event_name}"
-    pe_files = [fname for fname in os.listdir(output_dir) if fname.endswith('.hdf5') or fname.endswith('.h5')]
-    if len(pe_files) == 0:
-        typer.echo(f"No PE files found for event '{event_name}' in {output_dir}.")
-        return None
-    elif len(pe_files) > 1:
-        typer.echo(f"Multiple PE files found for event '{event_name}' in {output_dir}. Using the first one: {pe_files[0]}")
-    pe_file = pe_files[0]
-    pe_path = os.path.join(output_dir, pe_file)
-    print("pe_path:", pe_path)
-    # Load the PE samples using h5py
-    with h5py.File(pe_path, 'r') as f:
-        # Dataset is stored in one of the waveform approximants. In order of preference, use NRSur7dq4, then SEOBNRv4PHM, then IMRPhenomXPHM, then IMRPhenomPv2, then IMRPhenomD. 
-        approximants = ['NRSur7dq4', 'SEOBNRv4PHM', 'IMRPhenomXPHM', 'IMRPhenomPv2', 'IMRPhenomD']
-        approximants = [f"C00:{approx}" for approx in approximants] + approximants # Add "C00:" prefix versions of the approximants to the list:
-        dataset = None
-        for approx in approximants:
-            if approx in f:
-                dataset = f[approx]
-                break
-        if dataset is None:
-            typer.echo(f"WARNING: No known approximant found in PE file for event '{event_name}'. Available approximants: {list(f.keys())}")
-            return None
-        # Convert the dataset to a dictionary:
-        pe_samples = h5_to_dict(dataset)
-        typer.echo(f"Loaded PE samples from {pe_path} using approximant {approx}.")
-    return pe_samples
-
-
-
-def _process_psd_official(event_name):
-    # Load the strain data for the event
-    info = _get_lvk_info_individual(event_name)
-    detectors = info['detectors']
-    # Get the parameter estimation samples:
-    pe_samples = _load_pe_samples(event_name)
-    if pe_samples is None:
-        typer.echo(f"Cannot process PSD for event '{event_name}' because PE samples could not be loaded.")
-        return None
-    # Get the 'psd'
-    psds = pe_samples['psds']
-    for det in detectors:
-        if det in psds:
-            f, psd = np.transpose(psds[det])
-            # Save the PSD as a numpy file:
-            np.save(f"{event_name}/{event_name}_{det}_psd.npy", psd)
-            typer.echo(f"Saved PSD for {det} to {event_name}/{event_name}_{det}_psd.npy")
-        else:
-            typer.echo(f"WARNING: No PSD found for detector '{det}' in PE samples for event '{event_name}'. Available detectors in PE samples: {list(psds.keys())}")
-    from . import plots
-    fig, ax = plots.plot_psd(psds); fig.savefig(f"{event_name}/{event_name}_psd.pdf", bbox_inches='tight')
-    return psds
-
-def process_lvk_event(event_name):
-    _process_timeseries(event_name)
-    _process_psd_official(event_name)
-    return None
 
