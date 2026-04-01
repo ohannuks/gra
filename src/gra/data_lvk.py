@@ -307,10 +307,50 @@ def _load_pe_samples(event_name):
     return pe_samples
 
 
+def _crop_noise_around_signal(event_name, croplength=4):
+    """ Crop away the signal with +- `croplength` seconds around `gpstime`. For short BBH signals, 2 seconds is usually enough, but for low-mass signals you should use 16 seconds or more.
+    `data` is a dict {ifo: timeseries}.
+    Returns: noise[ifo]['before'/'after']
+    """
+    info = _get_lvk_info_individual(event_name)
+    gpstime = info['gps']
+    # If cropped data already exists, then just load it and return it:
+    noise = {}
+    for det in info['detectors']:
+        noise_before_path = f"{event_name}/{event_name}_{det}_noise_before.gwf"
+        noise_after_path = f"{event_name}/{event_name}_{det}_noise_after.gwf"
+        if os.path.exists(noise_before_path) and os.path.exists(noise_after_path):
+            noise[det] = {}
+            channel = frtools.get_channels(noise_before_path)[0]
+            noise[det]['before'] = gwpy.timeseries.TimeSeries.read(noise_before_path, format='gwf', channel=channel)
+            channel = frtools.get_channels(noise_after_path)[0]
+            noise[det]['after'] = gwpy.timeseries.TimeSeries.read(noise_after_path, format='gwf', channel=channel)
+            typer.echo(f"Loaded cropped noise data for {det} from {noise_before_path} and {noise_after_path}.")
+            continue
+    data = asyncio.run(_get_lvk_strain_individual(event_name, return_data=True, download_pe=False))
+    noise = {}
+    for det, ts in data.items():
+        noise[det] = {}
+        t0 = ts.times.value[0]
+        tf = ts.times.value[-1]
+        noise[det]['before'] = ts.crop(t0, gpstime-croplength)
+        noise[det]['after'] = ts.crop(gpstime+croplength, tf)
+    # Save the noise data to files
+    for det in noise:
+        noise_before_path = f"{event_name}/{event_name}_{det}_noise_before.gwf"
+        noise_after_path = f"{event_name}/{event_name}_{det}_noise_after.gwf"
+        noise[det]['before'].write(noise_before_path, format='gwf')
+        noise[det]['after'].write(noise_after_path, format='gwf')
+        typer.echo(f"Saved cropped noise data for {det} to {noise_before_path} and {noise_after_path}.")
+    return noise
+
 def _process_timeseries(event_name):
     info = _get_lvk_info_individual(event_name)
     detectors = info['detectors']
     data = asyncio.run(_get_lvk_strain_individual(event_name, return_data=True, download_pe=False))
+    # Crop the signal out of the data and save the results
+    gpstime = info['gps']
+    noises = _crop_noise_around_signal(event_name)
     from . import plots
     fig, ax = plots.plot_strain(data)
     fig.savefig(f"{event_name}/{event_name}_strain.pdf", bbox_inches='tight')
@@ -328,7 +368,7 @@ def _process_psd_official(event_name):
     for det in detectors:
         if det in psds:
             f, psd = np.transpose(psds[det])
-            np.save(f"{event_name}/{event_name}_{det}_psd.npy", psd)
+            np.save(f"{event_name}/{event_name}_{det}_psd.npy", [f, psd])
             typer.echo(f"Saved PSD for {det} to {event_name}/{event_name}_{det}_psd.npy")
         else:
             typer.echo(f"WARNING: No PSD found for detector '{det}' in PE samples for event '{event_name}'. Available detectors in PE samples: {list(psds.keys())}")
@@ -337,8 +377,39 @@ def _process_psd_official(event_name):
     fig.savefig(f"{event_name}/{event_name}_psd.pdf", bbox_inches='tight')
     return psds
 
+def _process_psd_welch(event_name):
+    info = _get_lvk_info_individual(event_name)
+    detectors = info['detectors']
+    noise = _crop_noise_around_signal(event_name)
+    psds = {}
+    for det in detectors:
+        if det in noise:
+            psds[det] = {}
+            for side in ['before', 'after']:
+                psd = noise[det][side].psd(fftlength=4, overlap=2)
+                freqs = psd.frequencies.value
+                psds[det][side] = np.transpose([freqs, psd.value])
+                np.save(f"{event_name}/{event_name}_{det}_{side}_psd_welch_seglen_4s.npy", [freqs, psd.value])
+                typer.echo(f"Saved Welch PSD for {det} ({side}) to {event_name}/{event_name}_{det}_{side}_psd_welch_seglen_4s.npy")
+        else:
+            typer.echo(f"WARNING: No strain noise found for detector '{det}' to compute Welch PSD for event '{event_name}'. Available detectors with strain noise: {list(noise.keys())}")
+    psds_before = {det: psds[det]['before'] for det in psds}
+    psds_after = {det: psds[det]['after'] for det in psds}
+    from . import plots
+    fig, ax = plots.plot_psd(psds_before)
+    fig, ax = plots.plot_psd(psds_after, fig=fig)
+    # Load the official psd and plot it out:
+    official_psds = _process_psd_official(event_name)
+    fig, ax = plots.plot_psd(official_psds, fig=fig)
+    # Change the color of the 'official' psd to black:
+    for ax_i in ax:
+        line = ax_i.get_lines()[-1]  # Get the last line, which should be the official psd
+        line.set_color('black')
+    fig.savefig(f"{event_name}/{event_name}_psd_welch.pdf", bbox_inches='tight')
+    return psds
 
 def process_lvk_event(event_name):
     _process_timeseries(event_name)
     _process_psd_official(event_name)
+    _process_psd_welch(event_name)
     return None

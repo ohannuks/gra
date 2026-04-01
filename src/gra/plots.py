@@ -21,6 +21,8 @@ def plot_strain(data):
     return fig, ax
 def plot_psd(psds, fig=None):
     detectors = psds.keys()
+    # Sort the detectors in a consistent order (e.g., alphabetically) to ensure the same order of subplots
+    detectors = sorted(detectors)
     if fig == None:
         fig, ax = plt.subplots(1, len(detectors), figsize=(10, 2*len(detectors)), sharex=True)
     else:
