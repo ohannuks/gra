@@ -12,6 +12,13 @@ This module handles all interactions with LVK open data:
 - Post-processing helpers: strain time-series figures and official PSD
   extraction from PE samples.
 
+Internal helpers
+----------------
+    _ensure_dir(path)                     – makedirs with exist_ok=True
+    _read_gwf(filename)                   – read a GWF file, auto-detecting channel
+    _find_event_catalog(event_name)       – resolve which catalog contains an event
+    _pe_glob_pattern(catalog, event_name) – Zenodo file-glob for PE downloads
+
 Public API (re-exported via ``data.py``):
     get_lvk_strain(event_name, download_pe, segment_length)
     list_data_lvk()
@@ -22,6 +29,7 @@ Public API (re-exported via ``data.py``):
 import warnings
 warnings.filterwarnings("ignore", "Wswiglal-redir-stdio")
 
+import json
 import numpy as np
 import h5py
 import gwpy
@@ -48,38 +56,51 @@ pe_zenodo_releases['GWTC-3-confident'] = 'https://zenodo.org/records/5546663'
 pe_zenodo_releases['GWTC-4.0'] = 'https://zenodo.org/records/17014085'
 
 
+def _ensure_dir(path):
+    os.makedirs(path, exist_ok=True)
+
+
+def _read_gwf(filename):
+    """Read a GWF file, inferring the channel name automatically."""
+    channel = frtools.get_channels(filename)[0]
+    return gwpy.timeseries.TimeSeries.read(filename, format='gwf', channel=channel)
+
+
+def _find_event_catalog(event_name):
+    """Return the catalog name that contains *event_name*, or None."""
+    for cat in list(pe_zenodo_releases.keys()) + ['O4_Discovery_Papers']:
+        if any(event_name in e for e in find_datasets(type='event', catalog=cat)):
+            return cat
+    return None
+
+
+def _pe_glob_pattern(catalog, event_name):
+    """Return the Zenodo file-glob pattern for a given catalog and event."""
+    if catalog == "GWTC-4.0":
+        return f"*{event_name}*"
+    return f"*{event_name}*nocosmo*.h5"
+
+
 async def _get_lvk_pe_data_async(event_name):
     output_dir = f"{current_dir}/{event_name}"
     if any(fname.endswith('.hdf5') for fname in os.listdir(output_dir)):
         typer.echo(f"PE data for '{event_name}' already exists in {output_dir}. Skipping download.")
         return
 
-    catalogs = list(pe_zenodo_releases.keys()) + ['O4_Discovery_Papers']
-    catalog = None
-
-    for cat in catalogs:
-        available_events = find_datasets(type='event', catalog=cat)
-        if any(event_name in event for event in available_events):
-            catalog = cat
-            break
-
+    catalog = _find_event_catalog(event_name)
     if catalog is None:
         typer.echo(f"Event '{event_name}' not found in available catalogs.")
         raise typer.Exit(code=1)
 
-    glob_pattern = f"*{event_name}*" if catalog == "GWTC-4.0" else f"*{event_name}*nocosmo*.h5"
+    if catalog not in pe_zenodo_releases:
+        typer.echo(f"No Zenodo release mapping found for catalog '{catalog}'.")
+        return
 
+    record_id = pe_zenodo_releases[catalog].split('/')[-1]
     typer.echo(f"Queuing Zenodo download for {event_name}...")
 
     loop = asyncio.get_running_loop()
-
-    download_func = partial(
-        zenodo_download,
-        record_id,
-        output_dir=".",
-        file_glob=glob_pattern
-    )
-
+    download_func = partial(zenodo_download, record_id, output_dir=".", file_glob=_pe_glob_pattern(catalog, event_name))
     await loop.run_in_executor(None, download_func)
 
     typer.echo(f"Finished downloading PE data for {event_name}")
@@ -91,40 +112,19 @@ def _get_lvk_pe_data(event_name):
         typer.echo(f"PE data for '{event_name}' already exists in {output_dir}. Skipping download.")
         return
 
-    catalogs = list(pe_zenodo_releases.keys()) + ['O4_Discovery_Papers']
-    catalog = None
-
-    for cat in catalogs:
-        available_events = find_datasets(type='event', catalog=cat)
-        if any(event_name in event for event in available_events):
-            catalog = cat
-            break
-
+    catalog = _find_event_catalog(event_name)
     if catalog is None:
         typer.echo(f"Event '{event_name}' not found in available catalogs.")
         raise typer.Exit(code=1)
 
-    if catalog in pe_zenodo_releases:
-        zenodo_url = pe_zenodo_releases[catalog]
-        record_id = zenodo_url.split('/')[-1]
-
-        typer.echo(f"Downloading PE data for '{event_name}' from Zenodo record {record_id}...")
-
-        if catalog == "GWTC-4.0":
-            zenodo_download(
-                record_id,
-                output_dir=f"{output_dir}",
-                file_glob=f"*{event_name}*"
-            )
-        else:
-            zenodo_download(
-                record_id,
-                output_dir=f"{output_dir}",
-                file_glob=f"*{event_name}*nocosmo*.h5"
-            )
-        typer.echo(f"Download complete. Files saved to: {output_dir}")
-    else:
+    if catalog not in pe_zenodo_releases:
         typer.echo(f"No Zenodo release mapping found for catalog '{catalog}'.")
+        return
+
+    record_id = pe_zenodo_releases[catalog].split('/')[-1]
+    typer.echo(f"Downloading PE data for '{event_name}' from Zenodo record {record_id}...")
+    zenodo_download(record_id, output_dir=output_dir, file_glob=_pe_glob_pattern(catalog, event_name))
+    typer.echo(f"Download complete. Files saved to: {output_dir}")
 
 
 def remove_duplicates(seq):
@@ -173,18 +173,16 @@ def list_data_lvk():
 
 def _get_lvk_info_individual(event_name):
     ''' Download info data for a specific event and save in the same folder as the strain data. '''
-    if not os.path.exists(event_name):
-        os.makedirs(event_name)
+    _ensure_dir(event_name)
     filename = f"{event_name}/{event_name}_info.json"
     if os.path.exists(filename):
         typer.echo(f"File {filename} already exists.")
         with open(filename, 'r') as f:
-            import json
             info = json.load(f)
             info['detectors'] = set(info['detectors'])
         typer.echo(f"Data loaded from {filename}.")
         return info
-    events = check_event_name(event_name)
+    check_event_name(event_name)
     gps = event_gps(event_name)
     detectors = event_detectors(event_name)
     info = {
@@ -193,7 +191,6 @@ def _get_lvk_info_individual(event_name):
         'detectors': list(detectors)
     }
     with open(filename, 'w') as f:
-        import json
         json.dump(info, f, indent=4)
     typer.echo(f"Saved event info to {filename}.")
     return info
@@ -202,14 +199,12 @@ def _get_lvk_info_individual(event_name):
 async def _get_lvk_strain_individual(event_name, return_data=False, download_pe=False, segment_length=60*20):
     ''' Download strain data for a specific event. '''
     info = _get_lvk_info_individual(event_name)
-    events = info['event_name']
     gps = info['gps']
     detectors = info['detectors']
     typer.echo(f"Event '{event_name}' found with GPS time {gps}.")
     start, end = int(gps - segment_length/2), int(gps + segment_length/2)
     data = {}
-    if not os.path.exists(event_name):
-        os.makedirs(event_name)
+    _ensure_dir(event_name)
     typer.echo(f"Downloading strain data for detectors: {', '.join(detectors)}")
     for det in detectors:
         if segment_length == 60*20:
@@ -218,28 +213,21 @@ async def _get_lvk_strain_individual(event_name, return_data=False, download_pe=
             filename = f"{event_name}/{event_name}_{det}_strain_{segment_length//60}min.gwf"
         if os.path.exists(filename):
             typer.echo(f"File {filename} already exists.")
-            if return_data == False:
-                continue
-            else:
-                channel_name = frtools.get_channels(filename)[0]
-                data[det] = gwpy.timeseries.TimeSeries.read(filename, format='gwf', channel=channel_name)
+            if return_data:
+                data[det] = _read_gwf(filename)
                 typer.echo(f"Data loaded from {filename}.")
-                continue
+            continue
         typer.echo(f"Fetching {det} data from {start} to {end}...")
         try:
             data[det] = gwpy.timeseries.TimeSeries.fetch_open_data(det, start, end, cache=True)
             data[det].channel = f"{det}:GWOSC-STRAIN"
             data[det].write(filename, format='gwf')
-            channel_name = data[det].channel
-            typer.echo(f"Saved strain data to {filename} with channel {channel_name}.")
+            typer.echo(f"Saved strain data to {filename} with channel {data[det].channel}.")
         except Exception as e:
             typer.echo(f"Error fetching data for {event_name} with {det}: {e}")
-    if download_pe == True:
+    if download_pe:
         _get_lvk_pe_data(event_name)
-    if return_data:
-        return data
-    else:
-        return None
+    return data if return_data else None
 
 
 def get_lvk_strain_individual_sync(event, download_pe=False, segment_length=60*20):
@@ -290,7 +278,7 @@ def _load_pe_samples(event_name):
         typer.echo(f"Multiple PE files found for event '{event_name}' in {output_dir}. Using the first one: {pe_files[0]}")
     pe_file = pe_files[0]
     pe_path = os.path.join(output_dir, pe_file)
-    print("pe_path:", pe_path)
+    typer.echo(f"pe_path: {pe_path}")
     with h5py.File(pe_path, 'r') as f:
         approximants = ['NRSur7dq4', 'SEOBNRv4PHM', 'IMRPhenomXPHM', 'IMRPhenomPv2', 'IMRPhenomD']
         approximants = [f"C00:{approx}" for approx in approximants] + approximants
@@ -314,28 +302,27 @@ def _crop_noise_around_signal(event_name, croplength=4):
     """
     info = _get_lvk_info_individual(event_name)
     gpstime = info['gps']
-    # If cropped data already exists, then just load it and return it:
     noise = {}
     for det in info['detectors']:
         noise_before_path = f"{event_name}/{event_name}_{det}_noise_before.gwf"
         noise_after_path = f"{event_name}/{event_name}_{det}_noise_after.gwf"
         if os.path.exists(noise_before_path) and os.path.exists(noise_after_path):
-            noise[det] = {}
-            channel = frtools.get_channels(noise_before_path)[0]
-            noise[det]['before'] = gwpy.timeseries.TimeSeries.read(noise_before_path, format='gwf', channel=channel)
-            channel = frtools.get_channels(noise_after_path)[0]
-            noise[det]['after'] = gwpy.timeseries.TimeSeries.read(noise_after_path, format='gwf', channel=channel)
+            noise[det] = {
+                'before': _read_gwf(noise_before_path),
+                'after': _read_gwf(noise_after_path),
+            }
             typer.echo(f"Loaded cropped noise data for {det} from {noise_before_path} and {noise_after_path}.")
-            continue
+    if len(noise) == len(info['detectors']):
+        return noise
     data = asyncio.run(_get_lvk_strain_individual(event_name, return_data=True, download_pe=False))
     noise = {}
     for det, ts in data.items():
-        noise[det] = {}
         t0 = ts.times.value[0]
         tf = ts.times.value[-1]
-        noise[det]['before'] = ts.crop(t0, gpstime-croplength)
-        noise[det]['after'] = ts.crop(gpstime+croplength, tf)
-    # Save the noise data to files
+        noise[det] = {
+            'before': ts.crop(t0, gpstime - croplength),
+            'after': ts.crop(gpstime + croplength, tf),
+        }
     for det in noise:
         noise_before_path = f"{event_name}/{event_name}_{det}_noise_before.gwf"
         noise_after_path = f"{event_name}/{event_name}_{det}_noise_after.gwf"
@@ -346,7 +333,6 @@ def _crop_noise_around_signal(event_name, croplength=4):
 
 def _process_timeseries(event_name):
     info = _get_lvk_info_individual(event_name)
-    detectors = info['detectors']
     data = asyncio.run(_get_lvk_strain_individual(event_name, return_data=True, download_pe=False))
     # Crop the signal out of the data and save the results
     gpstime = info['gps']

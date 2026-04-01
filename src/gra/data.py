@@ -32,23 +32,21 @@ def _get_2mass_spectroscopic(return_data=False):
     from astroquery.vizier import Vizier
     from astropy.table import Table
 
-    if not os.path.exists("2mass"):
-        os.makedirs("2mass")
+    os.makedirs("2mass", exist_ok=True)
     filename = "2mass/2mass_galaxy_catalog_spec.csv"
     if os.path.exists(filename):
         typer.echo(f"File {filename} already exists.")
-        if return_data == False:
+        if not return_data:
             return None
-        else:
-            data_table = Table.read(filename, format="ascii.csv")
-            typer.echo(f"Data loaded from {filename}.")
-            return data_table
+        data_table = Table.read(filename, format="ascii.csv")
+        typer.echo(f"Data loaded from {filename}.")
+        return data_table
 
     # Configure the Vizier query; row limit -1 to get the full catalog (~43k sources)
     v = Vizier(catalog="J/ApJS/199/26", columns=["2MRS", "RAJ2000", "DEJ2000", "cz"])
     v.ROW_LIMIT = -1
 
-    typer.echo(f"Downloading 2MRS Catalog... this may take a moment.")
+    typer.echo("Downloading 2MRS Catalog... this may take a moment.")
     result = v.get_catalogs("J/ApJS/199/26")
 
     if result:
@@ -67,10 +65,7 @@ def _get_2mass_spectroscopic(return_data=False):
         typer.echo("No data found.")
         data_table = None
 
-    if return_data == False:
-        return None
-    else:
-        return data_table
+    return data_table if return_data else None
 
 
 def _get_2mass_individual(event_name):
