@@ -219,7 +219,7 @@ async def _get_lvk_strain_individual(event_name, return_data=False, download_pe=
             continue
         typer.echo(f"Fetching {det} data from {start} to {end}...")
         try:
-            data[det] = gwpy.timeseries.TimeSeries.fetch_open_data(det, start, end, cache=True, sample_rate=16384)
+            data[det] = gwpy.timeseries.TimeSeries.fetch_open_data(det, start, end, cache=True, sample_rate=4096)
             data[det].channel = f"{det}:GWOSC-STRAIN"
             data[det].write(filename, format='gwf')
             typer.echo(f"Saved strain data to {filename} with channel {data[det].channel}.")
