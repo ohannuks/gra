@@ -11,6 +11,25 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
+def test_top_level_package_reexports_public_api():
+    import gra
+    from gra import data as data_mod
+    from gra import data_lvk as data_lvk_mod
+    from gra import plots as plots_mod
+
+    assert gra.data is data_mod
+    assert gra.data_lvk is data_lvk_mod
+    assert gra.plots is plots_mod
+    assert gra.get_2mass_data is data_mod.get_2mass_data
+    assert gra.get_lvk_strain is data_mod.get_lvk_strain
+    assert gra.list_data_lvk is data_mod.list_data_lvk
+    assert gra.process_lvk_event is data_mod.process_lvk_event
+    assert gra.remove_duplicates is data_lvk_mod.remove_duplicates
+    assert gra.h5_to_dict is data_lvk_mod.h5_to_dict
+    assert gra.plot_strain is plots_mod.plot_strain
+    assert gra.plot_psd is plots_mod.plot_psd
+
+
 # ---------------------------------------------------------------------------
 # get_2mass_data routing
 # ---------------------------------------------------------------------------
