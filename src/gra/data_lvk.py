@@ -196,7 +196,7 @@ def _get_lvk_info_individual(event_name):
     return info
 
 
-async def _get_lvk_strain_individual(event_name, return_data=False, download_pe=False, segment_length=60*20):
+async def _get_lvk_strain_individual(event_name, return_data=True, download_pe=False, segment_length=60*20):
     ''' Download strain data for a specific event. '''
     info = _get_lvk_info_individual(event_name)
     gps = info['gps']
