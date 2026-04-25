@@ -77,16 +77,11 @@ def build_likelihood(event_name: str):
         _posterior_path(event_name), _strain_gwf_map(event_name)
     )
 
-
-def _run_full_event_demo(
-    event_name: str = "GW231123_135430",
-) -> None:
+if __name__ == "__main__":
+    event_name = "GW231123_135430"
     _ = data_lvk._get_lvk_info_individual(event_name)
     ppath = _posterior_path(event_name)
     _ = load_posterior_dict(ppath)
-    print(
-        f"Posterior file for {event_name!r}: {ppath!r} (exists: {os.path.isfile(ppath)})"
-    )
     _ = _read_config(ppath)
     _ = load_psds_from_posterior(ppath)
     _ = _read_calib(ppath)
@@ -97,13 +92,3 @@ def _run_full_event_demo(
     _ = _build_waveform_generator_from_posterior(ppath)
     _ = build_likelihood(event_name)
 
-
-if __name__ == "__main__":
-    import sys
-
-    if len(sys.argv) > 1 and sys.argv[1] in ("--full", "full"):
-        _run_full_event_demo()
-    else:
-        print(
-            "pe_lvk: OK. Pass --full to run the LVK end-to-end demo (needs event data under cwd)."
-        )
