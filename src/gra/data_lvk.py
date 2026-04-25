@@ -1,34 +1,6 @@
-"""
-LVK (LIGO-Virgo-KAGRA) gravitational-wave data utilities.
-
-This module handles all interactions with LVK open data:
-
-- Strain download (single event or all events in parallel via asyncio +
-  ProcessPoolExecutor), backed by GWOSC ``gwpy`` / ``fetch_open_data``.
-- Parameter-estimation (PE) posterior sample download from Zenodo records
-  mapped in ``pe_zenodo_releases``.
-- Event metadata retrieval (GPS time, detector list) cached as JSON.
-- HDF5 PE file loading with automatic waveform-approximant selection.
-- Post-processing helpers: strain time-series figures and official PSD
-  extraction from PE samples.
-
-Internal helpers
-----------------
-    _ensure_dir(path)                     – makedirs with exist_ok=True
-    _read_gwf(filename)                   – read a GWF file, auto-detecting channel
-    _find_event_catalog(event_name)       – resolve which catalog contains an event
-    _pe_glob_pattern(catalog, event_name) – Zenodo file-glob for PE downloads
-
-Public API (re-exported via ``data.py``):
-    get_lvk_strain(event_name, download_pe, segment_length)
-    list_data_lvk()
-    process_lvk_event(event_name)
-"""
-
 # Get rid of annoying warning about swiglal redir stdio:
 import warnings
 warnings.filterwarnings("ignore", "Wswiglal-redir-stdio")
-
 import json
 import numpy as np
 import h5py
@@ -109,7 +81,9 @@ def _get_lvk_pe_data_filename(event_name):
     output_dir = f"{current_dir}/{event_name}/official_pe"
     if any(fname.endswith('.hdf5') for fname in os.listdir(output_dir)):
         return os.path.join(output_dir, next(fname for fname in os.listdir(output_dir) if fname.endswith('.hdf5')))
-    return None
+    else:
+        _get_lvk_pe_data(event_name)
+        return _get_lvk_pe_data_filename(event_name)  # Try again after downloading
 def _get_lvk_pe_data(event_name):
     output_dir = f"{current_dir}/{event_name}/official_pe"
     _ensure_dir(output_dir)

@@ -12,6 +12,7 @@ dependencies = [
     "astroquery>=0.4.11",
     "async>=0.6.2",
     "bilby>=2.6.0",
+    "deepdish>=0.3.7",
     "gwosc>=0.8.1",
     "gwpy>=3.0.14",
     "ipython>=9.9.0",
