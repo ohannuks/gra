@@ -910,7 +910,7 @@ requires-dist = [
     { name = "ipython", specifier = ">=9.9.0" },
     { name = "lalsuite", specifier = ">=7.26.1" },
     { name = "ler", specifier = ">=0.5.9" },
-    { name = "likelihoodloader", editable = "src/gra/likelihoodloader" },
+    { name = "likelihoodloader", git = "ssh://git@github.com/gravityhub-org/likelihoodloader.git" },
     { name = "numpy", specifier = ">=2.2.0" },
     { name = "rich", specifier = ">=14.3.3" },
     { name = "scienceplots", specifier = ">=2.2.1" },
@@ -1604,7 +1604,7 @@ wheels = [
 [[package]]
 name = "likelihoodloader"
 version = "0.1.0"
-source = { editable = "src/gra/likelihoodloader" }
+source = { git = "ssh://git@github.com/gravityhub-org/likelihoodloader.git#b8f1597ddbb4e1c09d76793dcc56f77156d97803" }
 dependencies = [
     { name = "astropy" },
     { name = "bilby" },
@@ -1613,17 +1613,6 @@ dependencies = [
     { name = "h5py" },
     { name = "lalsuite" },
     { name = "numpy" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "astropy", specifier = ">=7.0.0" },
-    { name = "bilby", specifier = ">=2.6.0" },
-    { name = "boltons", specifier = ">=25.0.0" },
-    { name = "gwpy", specifier = ">=3.0.14" },
-    { name = "h5py", specifier = ">=3.0.0" },
-    { name = "lalsuite", specifier = ">=7.0.0" },
-    { name = "numpy", specifier = ">=2.0.0" },
 ]
 
 [[package]]
