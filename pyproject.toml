@@ -12,7 +12,7 @@ dependencies = [
     "astroquery>=0.4.11",
     "async>=0.6.2",
     "bilby>=2.6.0",
-    "deepdish>=0.3.7",
+    "boltons>=25.0.0",
     "gwosc>=0.8.1",
     "gwpy>=3.0.14",
     "ipython>=9.9.0",
@@ -21,6 +21,7 @@ dependencies = [
     "numpy>=2.2.0",
     "rich>=14.3.3",
     "scienceplots>=2.2.1",
+    "silx>=3.0.0",
     "typer-slim>=0.24.0",
     "zenodo-get>=3.0.0",
 ]

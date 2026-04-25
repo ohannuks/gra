@@ -377,3 +377,11 @@ def process_lvk_event(event_name):
     _process_psd_official(event_name)
     _process_psd_welch(event_name)
     return None
+
+if __name__ == "__main__":
+    event_name = "GW231123_135430"
+    process_lvk_event(event_name)
+
+
+
+
