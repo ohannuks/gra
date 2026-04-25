@@ -1,6 +1,8 @@
 from gra import data_lvk
 from boltons.iterutils import research
 import bilby.core.utils.io
+import h5py
+import numpy as np
 
 # Hardcoded parameters
 PRIORITY_WAVEFORMS = ["NRSur7dq4", "SEOBNRv5PHM", "SEOBNRv4PHM", "IMRPhenomXPHM"]
@@ -30,7 +32,8 @@ def read_calibration_envelope_from_posterior(event_name):
     return calibration_envelope, calibration_model[0], int(spline_calibration_nodes[0])
 
 def read_prior_from_posterior(event_name):
-    from bilby.core.prior import Sine, Cosine, Uniform, Constraint, Gaussian, PowerLaw, LogUniform, JointPrior, PriorDict
+    from bilby.core.prior import Sine, Cosine, Uniform, Constraint, Gaussian, PowerLaw, LogUniform, JointPrior, PriorDict, DeltaFunction
+    from astropy.cosmology import Planck18, LambdaCDM
     posterior_filename = data_lvk._get_lvk_pe_data_filename(event_name)
     posterior_dict = _posterior_to_dict(posterior_filename)
     prior_path, prior_dict_unformatted = _find_dictionary(posterior_dict, "analytic")[0]
@@ -54,26 +57,27 @@ def read_meta_data_from_posterior(event_name):
 
 def read_frequency_cuts_from_posterior(event_name):
     config = read_config_from_posterior(event_name)
+    import re
     format_str = lambda s: re.sub(r'\{(.*)\}', r'dict(\1)', s).replace(':', '=')
     minimum_frequency_dict = eval(format_str(config['minimum_frequency'][0]))
     maximum_frequency_dict = eval(format_str(config['maximum_frequency'][0]))
     return minimum_frequency_dict, maximum_frequency_dict
 
 def _resample_gwpy_timeseries(ts, sampling_frequency, resampling_method):
-    if method == "gwpy":
+    if resampling_method == "gwpy":
         return ts.resample(sampling_frequency)
-    elif method == "lal":
+    elif resampling_method == "lal":
         from lal import ResampleREAL8TimeSeries
         lal_timeseries = ts.to_lal()
         ResampleREAL8TimeSeries(lal_timeseries, float(1.0/sampling_frequency))
         from gwpy.timeseries import TimeSeries
-        return TimeSeries(lal_timeseries.data.data, epoch=lal_timeseries.epoch, dt=lal_timeserires.deltaT)
+        return TimeSeries(lal_timeseries.data.data, epoch=lal_timeseries.epoch, dt=lal_timeseries.deltaT)
     else:
-        raise ValueError(f"Unknown resampling method '{method}'; only 'gwpy' and 'lal' are supported")
+        raise ValueError(f"Unknown resampling resampling_method '{resampling_method}'; only 'gwpy' and 'lal' are supported")
 
 def load_and_crop_strain(event_name):
     info = data_lvk._get_lvk_info_individual(event_name)
-    data = data_lvk.get_lvk_strain_individual_sync(event)
+    data = data_lvk.get_lvk_strain_individual_sync(event_name)
     meta_data = read_meta_data_from_posterior(event_name)
     # Crop timeseries
     start_time = meta_data['start_time'][0]
@@ -82,7 +86,7 @@ def load_and_crop_strain(event_name):
     data_cropped = { ifo: strain.crop(start_time, end_time) for ifo, strain in data.items() }
     sampling_frequency = meta_data['sampling_frequency'][0]
     # Resample the time series
-    data_cropped_resampled = { ifo: _resample_gwpy_timeseries(strain, sampling_frequency, method="lal") for ifo, strain in data_cropped.items() }
+    data_cropped_resampled = { ifo: _resample_gwpy_timeseries(strain, sampling_frequency, resampling_method="lal") for ifo, strain in data_cropped.items() }
     return data_cropped_resampled
 
 def build_interferometers(event_name):
@@ -103,7 +107,7 @@ def build_interferometers(event_name):
         ifo.set_strain_data_from_gwpy_timeseries(data[ifo.name])
         tukey_roll_off = float(config['tukey_roll_off'][0])
         ifo.strain_data.roll_off = tukey_roll_off
-        f_ifo, psd_ifo = psds[ifo.name]
+        f_ifo, psd_ifo = np.transpose(psds[ifo.name])
         ifo.power_spectral_density = bilby.gw.detector.PowerSpectralDensity( frequency_array=f_ifo, psd_array=psd_ifo)
         if calibration_model == "CubicSpline":
             ifo.calibration_model = bilby.gw.calibration.CubicSpline(
@@ -112,9 +116,9 @@ def build_interferometers(event_name):
                 maximum_frequency=ifo.maximum_frequency,
                 n_points=spline_calibration_nodes,
             )
-            if ifo.name in calibration_envelope_dict:
+            if ifo.name in calibration_envelope:
                 ifo.meta_data["calibration_envelope"] = np.asarray(
-                    calibration_envelope_dict[ifo.name]
+                    calibration_envelope[ifo.name]
                 )
         elif calibration_model is not None:
             raise ValueError(f"Unsupported calibration model: {calibration_model}")
@@ -138,7 +142,7 @@ def build_likelihood(event_name):
     posterior_filename = data_lvk._get_lvk_pe_data_filename(event_name)
     config = read_config_from_posterior(event_name)
     psds = data_lvk._process_psd_official(event_name)
-    prior = read_prior_from_posterior(event_name)
+    priors = read_prior_from_posterior(event_name)
     interferometers = build_interferometers(event_name)
     waveform_generator = build_waveform_generator(event_name)
     jitter_time = bool(config['jitter_time'][0])
@@ -147,7 +151,7 @@ def build_likelihood(event_name):
     likelihood = bilby.gw.GravitationalWaveTransient(
         interferometers=interferometers,
         waveform_generator=waveform_generator,
-        jitter_time=settings['jitter_time'],
+        jitter_time=jitter_time,
         time_marginalization=False,
         phase_marginalization=False,
         distance_marginalization=False,

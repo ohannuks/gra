@@ -79,6 +79,7 @@ async def _get_lvk_pe_data_async(event_name):
 
 def _get_lvk_pe_data_filename(event_name):
     output_dir = f"{current_dir}/{event_name}/official_pe"
+    _ensure_dir(output_dir)
     if any(fname.endswith('.hdf5') for fname in os.listdir(output_dir)):
         return os.path.join(output_dir, next(fname for fname in os.listdir(output_dir) if fname.endswith('.hdf5')))
     else:
@@ -247,7 +248,7 @@ def h5_to_dict(h5_obj):
 
 
 def _load_pe_samples(event_name):
-    output_dir = f"{current_dir}/{event_name}"
+    output_dir = f"{current_dir}/{event_name}/official_pe"
     pe_files = [fname for fname in os.listdir(output_dir) if fname.endswith('.hdf5') or fname.endswith('.h5')]
     if len(pe_files) == 0:
         typer.echo(f"No PE files found for event '{event_name}' in {output_dir}.")
