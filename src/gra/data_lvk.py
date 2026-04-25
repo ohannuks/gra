@@ -105,9 +105,14 @@ async def _get_lvk_pe_data_async(event_name):
 
     typer.echo(f"Finished downloading PE data for {event_name}")
 
-
+def _get_lvk_pe_data_filename(event_name):
+    output_dir = f"{current_dir}/{event_name}/official_pe"
+    if any(fname.endswith('.hdf5') for fname in os.listdir(output_dir)):
+        return os.path.join(output_dir, next(fname for fname in os.listdir(output_dir) if fname.endswith('.hdf5')))
+    return None
 def _get_lvk_pe_data(event_name):
-    output_dir = f"{current_dir}/{event_name}"
+    output_dir = f"{current_dir}/{event_name}/official_pe"
+    _ensure_dir(output_dir)
     if any(fname.endswith('.hdf5') for fname in os.listdir(output_dir)):
         typer.echo(f"PE data for '{event_name}' already exists in {output_dir}. Skipping download.")
         return
@@ -125,7 +130,6 @@ def _get_lvk_pe_data(event_name):
     typer.echo(f"Downloading PE data for '{event_name}' from Zenodo record {record_id}...")
     zenodo_download(record_id, output_dir=output_dir, file_glob=_pe_glob_pattern(catalog, event_name))
     typer.echo(f"Download complete. Files saved to: {output_dir}")
-
 
 def remove_duplicates(seq):
     # Each event has multiple versions, so the last bit in the name of '-vX'. We remove it and then remove duplicates.
