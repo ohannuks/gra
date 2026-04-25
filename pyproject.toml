@@ -8,6 +8,7 @@ authors = [
 ]
 requires-python = ">=3.11"
 dependencies = [
+    "likelihoodloader @ git+ssh://git@github.com/gravityhub-org/likelihoodloader.git",
     "astropy>=7.2.0",
     "astroquery>=0.4.11",
     "async>=0.6.2",
@@ -37,3 +38,6 @@ dev = [
 [build-system]
 requires = ["uv_build>=0.9.26,<0.10.0"]
 build-backend = "uv_build"
+
+[tool.uv.sources]
+likelihoodloader = { path = "src/gra/likelihoodloader", editable = true }

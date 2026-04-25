@@ -1,0 +1,18 @@
+[project]
+name = "likelihoodloader"
+version = "0.1.0"
+description = "Build Bilby LVK-style gravitational-wave likelihoods from PE posterior and strain GWF"
+requires-python = ">=3.11"
+dependencies = [
+    "astropy>=7.0.0",
+    "bilby>=2.6.0",
+    "boltons>=25.0.0",
+    "gwpy>=3.0.14",
+    "h5py>=3.0.0",
+    "lalsuite>=7.0.0",
+    "numpy>=2.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

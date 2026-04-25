@@ -884,6 +884,7 @@ dependencies = [
     { name = "ipython" },
     { name = "lalsuite" },
     { name = "ler" },
+    { name = "likelihoodloader" },
     { name = "numpy" },
     { name = "rich" },
     { name = "scienceplots" },
@@ -909,6 +910,7 @@ requires-dist = [
     { name = "ipython", specifier = ">=9.9.0" },
     { name = "lalsuite", specifier = ">=7.26.1" },
     { name = "ler", specifier = ">=0.5.9" },
+    { name = "likelihoodloader", editable = "src/gra/likelihoodloader" },
     { name = "numpy", specifier = ">=2.2.0" },
     { name = "rich", specifier = ">=14.3.3" },
     { name = "scienceplots", specifier = ">=2.2.1" },
@@ -1597,6 +1599,31 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/7e/9b/521be61daa7603603826d40fa6327a22e04df4f20e69d9ed42182370a7f8/ligotimegps-2.1.0.tar.gz", hash = "sha256:d948ffc4d58472b303478a983ec56d2e6a7f35e54cbb351ca6f1292e68398cb2", size = 28069, upload-time = "2025-10-07T10:55:28.124Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0e/92/38674acb59c663bcdb69522e11afd3b4e6371f74b5764aeec2e99308cd79/ligotimegps-2.1.0-py3-none-any.whl", hash = "sha256:14dbbb07b175b94b4e1a519d7baa4548f0ea07bc71ef7d7f096ad8397d359043", size = 23370, upload-time = "2025-10-07T10:55:28.855Z" },
+]
+
+[[package]]
+name = "likelihoodloader"
+version = "0.1.0"
+source = { editable = "src/gra/likelihoodloader" }
+dependencies = [
+    { name = "astropy" },
+    { name = "bilby" },
+    { name = "boltons" },
+    { name = "gwpy" },
+    { name = "h5py" },
+    { name = "lalsuite" },
+    { name = "numpy" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "astropy", specifier = ">=7.0.0" },
+    { name = "bilby", specifier = ">=2.6.0" },
+    { name = "boltons", specifier = ">=25.0.0" },
+    { name = "gwpy", specifier = ">=3.0.14" },
+    { name = "h5py", specifier = ">=3.0.0" },
+    { name = "lalsuite", specifier = ">=7.0.0" },
+    { name = "numpy", specifier = ">=2.0.0" },
 ]
 
 [[package]]
