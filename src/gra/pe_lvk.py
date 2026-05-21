@@ -1,6 +1,5 @@
 """PE / likelihood helpers: event_name paths here; core logic in ``likelihoodloader``."""
 
-import os
 
 from likelihoodloader import (
     build_interferometers as _build_interferometers_from_files,

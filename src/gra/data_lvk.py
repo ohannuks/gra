@@ -7,7 +7,6 @@ import h5py
 import gwpy
 from gwosc.datasets import find_datasets, event_gps, event_detectors
 from zenodo_get import download as zenodo_download
-from gwosc.locate import get_event_urls
 import asyncio
 import concurrent.futures
 from functools import partial

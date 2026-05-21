@@ -1,7 +1,5 @@
 import pylab as plt
 import numpy as np
-import gwpy.timeseries
-import scienceplots
 plt.style.use(['science', 'ieee', 'bright'])
 def plot_strain(data):
     detectors = data.keys()
