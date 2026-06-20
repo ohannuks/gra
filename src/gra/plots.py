@@ -1,7 +1,5 @@
 import pylab as plt
 import numpy as np
-import scienceplots
-plt.style.use(['science', 'ieee', 'bright'])
 def plot_strain(data):
     detectors = data.keys()
     fig, ax = plt.subplots(len(detectors), 1, figsize=(10, 2*len(detectors)), sharex=True)
