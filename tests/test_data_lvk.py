@@ -116,7 +116,7 @@ def test_check_event_name_invalid_raises():
     from gra.data_lvk import check_event_name
     import click
     with patch("gra.data_lvk._list_lvk_data", return_value=["GW150914"]):
-        with pytest.raises((SystemExit, click.exceptions.Exit)):
+        with pytest.raises((SystemExit, click.exceptions.Exit, typer.Exit)):
             check_event_name("GW999999")
 
 

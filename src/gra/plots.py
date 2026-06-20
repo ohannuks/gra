@@ -1,5 +1,17 @@
 import pylab as plt
 import numpy as np
+
+MAX_PLOT_POINTS = 8192
+
+
+def _decimate_for_plot(x, y, max_points=MAX_PLOT_POINTS):
+    n = len(x)
+    if n <= max_points:
+        return x, y
+    step = max(1, n // max_points)
+    return x[::step], y[::step]
+
+
 def plot_strain(data):
     detectors = data.keys()
     fig, ax = plt.subplots(len(detectors), 1, figsize=(10, 2*len(detectors)), sharex=True)
@@ -8,8 +20,7 @@ def plot_strain(data):
         ax = [ax]
     for i, det in enumerate(detectors):
         strain_data = data[det] # Time series object (gwpy)
-        time = strain_data.times.value
-        strain = strain_data.value
+        time, strain = _decimate_for_plot(strain_data.times.value, strain_data.value)
         ax[i].plot(time, strain, label=det)
         plt.xlim(time[0], time[-1])
         ax[i].set_ylabel('Strain')
@@ -37,4 +48,9 @@ def plot_psd(psds, fig=None):
         ax[i].legend()
     ax[-1].set_xlabel('Frequency (Hz)')
     return fig, ax
+
+
+def save_figure(fig, path):
+    fig.savefig(path, bbox_inches='tight')
+    plt.close(fig)
 
