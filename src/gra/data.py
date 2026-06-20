@@ -24,6 +24,8 @@ import astropy
 import typer
 from rich.console import Console
 
+from .data_lvk import get_lvk_strain, list_data_lvk, process_lvk_event
+
 console = Console()
 
 
